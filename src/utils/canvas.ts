@@ -2,7 +2,7 @@ import type { Point3D } from '../types/hand';
 import type { PadConfig } from '../types/instrument';
 
 /** How far the stick extends past the fist (as a fraction of palm length). */
-const STICK_LENGTH_MULTIPLIER = 2.5;
+const STICK_LENGTH_MULTIPLIER = 1.2;
 
 /** Draw a drumstick that appears to come out of the hand naturally. */
 export function drawDrumstick(
@@ -43,10 +43,10 @@ export function drawDrumstick(
   // Draw stick shadow for depth
   ctx.save();
   ctx.beginPath();
-  ctx.moveTo(gripX + 3, gripY + 3);
-  ctx.lineTo(endX + 3, endY + 3);
+  ctx.moveTo(gripX + 2, gripY + 2);
+  ctx.lineTo(endX + 2, endY + 2);
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.lineWidth = 10;
+  ctx.lineWidth = 5;
   ctx.lineCap = 'round';
   ctx.stroke();
   ctx.restore();
@@ -64,7 +64,7 @@ export function drawDrumstick(
   ctx.moveTo(gripX, gripY);
   ctx.lineTo(endX, endY);
   ctx.strokeStyle = grad;
-  ctx.lineWidth = 8;
+  ctx.lineWidth = 4;
   ctx.lineCap = 'round';
   ctx.stroke();
 
@@ -73,16 +73,16 @@ export function drawDrumstick(
   ctx.moveTo(gripX, gripY);
   ctx.lineTo(endX, endY);
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 1.5;
   ctx.lineCap = 'round';
   ctx.stroke();
 
   // Stick tip (oval bead)
-  const tipRadius = 10;
+  const tipRadius = 5;
   ctx.beginPath();
   ctx.ellipse(endX, endY, tipRadius, tipRadius * 0.8, Math.atan2(normalizedDirY, normalizedDirX), 0, Math.PI * 2);
   
-  const tipGrad = ctx.createRadialGradient(endX - 2, endY - 2, 0, endX, endY, tipRadius);
+  const tipGrad = ctx.createRadialGradient(endX - 1, endY - 1, 0, endX, endY, tipRadius);
   tipGrad.addColorStop(0, '#FFFFFF');
   tipGrad.addColorStop(0.3, '#F5F5F5');
   tipGrad.addColorStop(0.7, '#D7CCC8');
@@ -91,12 +91,12 @@ export function drawDrumstick(
   ctx.fillStyle = tipGrad;
   ctx.fill();
   ctx.strokeStyle = 'rgba(139, 90, 43, 0.6)';
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 1;
   ctx.stroke();
 
   // Subtle glow around tip for visibility
   ctx.beginPath();
-  ctx.arc(endX, endY, tipRadius + 6, 0, Math.PI * 2);
+  ctx.arc(endX, endY, tipRadius + 3, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
   ctx.fill();
 }
