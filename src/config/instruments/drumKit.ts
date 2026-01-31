@@ -1,0 +1,62 @@
+import type { InstrumentConfig } from '../../types/instrument';
+
+export const drumKitConfig: InstrumentConfig = {
+  id: 'drum-kit',
+  name: 'Drum Kit',
+  pads: [
+    {
+      id: 'snare',
+      label: 'Snare',
+      region: { cx: 0.5, cy: 0.7, radius: 0.09 },
+      soundFile: '/sounds/snare.wav',
+      color: '#ef4444',
+      cooldownMs: 80,
+      velocityThreshold: 0.012,
+    },
+    {
+      id: 'hihat',
+      label: 'Hi-Hat',
+      region: { cx: 0.22, cy: 0.55, radius: 0.08 },
+      soundFile: '/sounds/hihat.wav',
+      color: '#eab308',
+      cooldownMs: 50,
+      velocityThreshold: 0.008,
+    },
+    {
+      id: 'tom-high',
+      label: 'High Tom',
+      region: { cx: 0.7, cy: 0.5, radius: 0.08 },
+      soundFile: '/sounds/tom-high.wav',
+      color: '#3b82f6',
+      cooldownMs: 80,
+      velocityThreshold: 0.012,
+    },
+    {
+      id: 'tom-low',
+      label: 'Low Tom',
+      region: { cx: 0.8, cy: 0.65, radius: 0.08 },
+      soundFile: '/sounds/tom-low.wav',
+      color: '#a855f7',
+      cooldownMs: 80,
+      velocityThreshold: 0.012,
+    },
+    {
+      id: 'crash',
+      label: 'Crash',
+      region: { cx: 0.3, cy: 0.28, radius: 0.08 },
+      soundFile: '/sounds/crash.wav',
+      color: '#f97316',
+      cooldownMs: 200,
+      velocityThreshold: 0.015,
+    },
+    {
+      id: 'ride',
+      label: 'Ride',
+      region: { cx: 0.72, cy: 0.28, radius: 0.08 },
+      soundFile: '/sounds/ride.wav',
+      color: '#22c55e',
+      cooldownMs: 120,
+      velocityThreshold: 0.012,
+    },
+  ],
+};
