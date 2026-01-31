@@ -28,5 +28,4 @@ export interface HitEvent {
   velocity: number;
   timestamp: number;
   handIndex: number;
-  fingertip: number;
 }

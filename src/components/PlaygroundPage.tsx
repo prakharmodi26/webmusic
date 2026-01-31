@@ -11,8 +11,10 @@ import CalibrationOverlay from './CalibrationOverlay';
 import DistanceBanner from './DistanceBanner';
 import SettingsPanel from './SettingsPanel';
 import InstrumentSelector from './InstrumentSelector';
-import { drawPad, drawRipple, drawLandmarks, type RippleState } from '../utils/canvas';
+import { drawPad, drawRipple, drawDrumstick, type RippleState } from '../utils/canvas';
 import { pointInRegion } from '../utils/geometry';
+import { recognizeGesture } from '../core/gestureRecognizer';
+import { getStickTip } from '../core/hitDetector';
 
 type Stage = 'idle' | 'loading' | 'calibrating' | 'playing';
 
@@ -131,10 +133,14 @@ export default function PlaygroundPage() {
         }
       }
 
-      // Draw hand skeleton
+      // Draw drumsticks for closed fists
       if (frame) {
         for (const hand of frame.hands) {
-          drawLandmarks(ctx, hand.landmarks, w, h);
+          const gesture = recognizeGesture(hand);
+          if (gesture === 'fist') {
+            const tip = getStickTip(hand.landmarks);
+            drawDrumstick(ctx, hand.landmarks, tip.x, tip.y, w, h);
+          }
         }
       }
 
