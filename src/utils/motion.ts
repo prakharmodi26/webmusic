@@ -27,10 +27,12 @@ export class MotionTracker {
 
     const oldest = buffer[0];
     const newest = buffer[buffer.length - 1];
-    const dt = newest.timestamp - oldest.timestamp;
-    if (dt === 0) return 0;
+    const dtMs = newest.timestamp - oldest.timestamp;
+    if (dtMs === 0) return 0;
 
-    return (newest.point.y - oldest.point.y) / dt;
+    // Convert to per-second velocity (timestamps are in ms from rAF)
+    const dtSec = dtMs / 1000;
+    return (newest.point.y - oldest.point.y) / dtSec;
   }
 
   isMovingDown(key: string): boolean {

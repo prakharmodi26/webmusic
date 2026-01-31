@@ -4,6 +4,8 @@ export interface PadRegion {
   radius: number;
 }
 
+export type DrumShape = 'drum' | 'cymbal' | 'hihat';
+
 export interface PadConfig {
   id: string;
   label: string;
@@ -12,6 +14,7 @@ export interface PadConfig {
   color: string;
   cooldownMs: number;
   velocityThreshold: number;
+  shape: DrumShape;
 }
 
 export interface InstrumentConfig {

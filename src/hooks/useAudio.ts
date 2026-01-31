@@ -26,5 +26,5 @@ export function useAudio() {
     await engineRef.current?.resume();
   }, []);
 
-  return { engine: engineRef.current, isLoaded, init, loadCustomSample, resume };
+  return { engineRef, isLoaded, init, loadCustomSample, resume };
 }

@@ -26,8 +26,8 @@ export default function PlaygroundPage() {
 
   const { videoRef, isActive: cameraActive, error: cameraError, start: startCamera } = useCamera();
   const { frame, isLoading: trackingLoading, isReady: trackingReady, init: initTracking, startLoop } = useHandTracking(videoRef);
-  const { engine, isLoaded: audioLoaded, init: initAudio, loadCustomSample, resume: resumeAudio } = useAudio();
-  const { processFrame, activePads, ripples, setRipples, setSensitivity: setDetectorSensitivity } = useHitDetection(engine, drumKitConfig.pads);
+  const { engineRef, isLoaded: audioLoaded, init: initAudio, loadCustomSample, resume: resumeAudio } = useAudio();
+  const { processFrame, activePads, ripples, setRipples, setSensitivity: setDetectorSensitivity } = useHitDetection(engineRef, drumKitConfig.pads);
   const distanceStatus = useDistanceGuide(frame);
 
   const handleStart = useCallback(async () => {

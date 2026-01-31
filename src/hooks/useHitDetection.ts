@@ -1,12 +1,12 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 import { HitDetector } from '../core/hitDetector';
-import { AudioEngine } from '../core/audioEngine';
+import type { AudioEngine } from '../core/audioEngine';
 import type { TrackingFrame } from '../types/hand';
 import type { PadConfig } from '../types/instrument';
 import type { RippleState } from '../utils/canvas';
 
 export function useHitDetection(
-  audioEngine: AudioEngine | null,
+  audioEngineRef: React.RefObject<AudioEngine | null>,
   pads: PadConfig[],
 ) {
   const detectorRef = useRef(new HitDetector());
@@ -19,7 +19,7 @@ export function useHitDetection(
       const hits = detectorRef.current.update(frame, pads);
 
       for (const hit of hits) {
-        audioEngine?.play(hit.padId, hit.velocity);
+        audioEngineRef.current?.play(hit.padId, hit.velocity);
 
         const pad = pads.find((p) => p.id === hit.padId);
         if (pad) {
@@ -49,7 +49,7 @@ export function useHitDetection(
         }
       }
     },
-    [audioEngine, pads],
+    [audioEngineRef, pads],
   );
 
   const setSensitivity = useCallback((value: number) => {

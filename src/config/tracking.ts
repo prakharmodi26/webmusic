@@ -9,11 +9,11 @@ export const TRACKING_CONFIG = {
 };
 
 export const DISTANCE_THRESHOLDS = {
-  tooClose: 0.35,
-  tooFar: 0.12,
-  okMin: 0.12,
-  okMax: 0.35,
+  // Based on wrist-to-middle-MCP (landmark 9) distance in normalized coords
+  tooClose: 0.18,
+  tooFar: 0.05,
 };
 
 export const VELOCITY_BUFFER_SIZE = 5;
-export const MAX_VELOCITY = 0.08;
+// Velocity thresholds are now in normalized-units per second
+export const MAX_VELOCITY = 3.0;
