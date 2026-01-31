@@ -1,62 +1,22 @@
 import type { InstrumentConfig } from '../../types/instrument';
 
-// Layout: Camera pointed at torso/lap. Kit fills the visible area.
-// From the player's perspective looking down at their lap:
+// Layout based on reference image:
 //
-//     Crash              Ride         (top - cymbals on stands)
-//  Hi-Hat  High Tom   Low Tom         (middle)
-//             Snare                    (center-bottom - main drum)
+//     Crash (L)                    Ride (R)       (top corners - cymbals)
+//  Snare (L)    Bass (Center)    Tom-High (R)    (middle row - main drums)
+//     Tom-Low (L)              Hi-Hat (R)        (bottom corners)
 
 export const drumKitConfig: InstrumentConfig = {
   id: 'drum-kit',
   name: 'Drum Kit',
   pads: [
-    {
-      id: 'snare',
-      label: 'Snare',
-      region: { cx: 0.5, cy: 0.7, radius: 0.11 },
-      soundFile: '/sounds/snare.wav',
-      color: '#ef4444',
-      cooldownMs: 60,
-      velocityThreshold: 0.3,
-      shape: 'drum',
-    },
-    {
-      id: 'hihat',
-      label: 'Hi-Hat',
-      region: { cx: 0.15, cy: 0.50, radius: 0.08 },
-      soundFile: '/sounds/hihat.wav',
-      color: '#eab308',
-      cooldownMs: 40,
-      velocityThreshold: 0.25,
-      shape: 'hihat',
-    },
-    {
-      id: 'tom-high',
-      label: 'High Tom',
-      region: { cx: 0.38, cy: 0.45, radius: 0.09 },
-      soundFile: '/sounds/tom-high.wav',
-      color: '#3b82f6',
-      cooldownMs: 60,
-      velocityThreshold: 0.3,
-      shape: 'drum',
-    },
-    {
-      id: 'tom-low',
-      label: 'Low Tom',
-      region: { cx: 0.62, cy: 0.45, radius: 0.09 },
-      soundFile: '/sounds/tom-low.wav',
-      color: '#a855f7',
-      cooldownMs: 60,
-      velocityThreshold: 0.3,
-      shape: 'drum',
-    },
+    // Top row - Cymbals (golden brass color)
     {
       id: 'crash',
       label: 'Crash',
-      region: { cx: 0.2, cy: 0.2, radius: 0.09 },
+      region: { cx: 0.13, cy: 0.18, radius: 0.12 },
       soundFile: '/sounds/crash.wav',
-      color: '#f97316',
+      color: '#D4A843', // Golden brass
       cooldownMs: 150,
       velocityThreshold: 0.35,
       shape: 'cymbal',
@@ -64,12 +24,64 @@ export const drumKitConfig: InstrumentConfig = {
     {
       id: 'ride',
       label: 'Ride',
-      region: { cx: 0.8, cy: 0.2, radius: 0.09 },
+      region: { cx: 0.87, cy: 0.18, radius: 0.12 },
       soundFile: '/sounds/ride.wav',
-      color: '#22c55e',
+      color: '#D4A843', // Golden brass
       cooldownMs: 100,
       velocityThreshold: 0.3,
       shape: 'cymbal',
+    },
+    // Middle row - Main drums
+    {
+      id: 'snare',
+      label: 'Snare',
+      region: { cx: 0.18, cy: 0.55, radius: 0.14 },
+      soundFile: '/sounds/snare.wav',
+      color: '#CCCCCC', // Silver/chrome
+      cooldownMs: 60,
+      velocityThreshold: 0.3,
+      shape: 'drum',
+    },
+    {
+      id: 'bass',
+      label: 'Bass',
+      region: { cx: 0.5, cy: 0.58, radius: 0.18 },
+      soundFile: '/sounds/tom-low.wav', // Using tom-low as bass
+      color: '#CCCCCC', // Silver/chrome
+      cooldownMs: 60,
+      velocityThreshold: 0.3,
+      shape: 'drum',
+    },
+    {
+      id: 'tom-high',
+      label: 'High Tom',
+      region: { cx: 0.82, cy: 0.55, radius: 0.12 },
+      soundFile: '/sounds/tom-high.wav',
+      color: '#CCCCCC', // Silver/chrome
+      cooldownMs: 60,
+      velocityThreshold: 0.3,
+      shape: 'drum',
+    },
+    // Bottom row - Corner drums
+    {
+      id: 'tom-low',
+      label: 'Low Tom',
+      region: { cx: 0.15, cy: 0.85, radius: 0.10 },
+      soundFile: '/sounds/tom-low.wav',
+      color: '#CCCCCC', // Silver/chrome
+      cooldownMs: 60,
+      velocityThreshold: 0.3,
+      shape: 'drum',
+    },
+    {
+      id: 'hihat',
+      label: 'Hi-Hat',
+      region: { cx: 0.85, cy: 0.85, radius: 0.10 },
+      soundFile: '/sounds/hihat.wav',
+      color: '#CCCCCC', // Silver/chrome
+      cooldownMs: 40,
+      velocityThreshold: 0.25,
+      shape: 'hihat',
     },
   ],
 };

@@ -1,12 +1,18 @@
 import type { TrackingFrame, Point3D } from '../types/hand';
 import type { PadConfig, HitEvent } from '../types/instrument';
-import { pointInRegion, clamp } from '../utils/geometry';
+import { pointOverlapsRegion, clamp } from '../utils/geometry';
 import { MotionTracker } from '../utils/motion';
 import { MAX_VELOCITY } from '../config/tracking';
 import { recognizeGesture } from './gestureRecognizer';
 
 /** How far the stick tip extends past the fist (as a fraction of palm length). */
 const STICK_EXTENSION = 0.8;
+
+/** Radius of the drumstick tip for hit detection (normalized coordinates). */
+const TIP_RADIUS = 0.03;
+
+/** Minimum overlap threshold (30%) to trigger a hit. */
+const HIT_OVERLAP_THRESHOLD = 0.3;
 
 /** Compute the drumstick tip position from hand landmarks. */
 export function getStickTip(landmarks: Point3D[]): Point3D {
@@ -50,7 +56,8 @@ export class HitDetector {
       const velocityY = this.motionTracker.getVelocityY(key);
 
       for (const pad of pads) {
-        if (!pointInRegion(tip.x, tip.y, pad.region)) continue;
+        // Check if the drumstick tip overlaps with the pad by at least 30%
+        if (!pointOverlapsRegion(tip.x, tip.y, pad.region, HIT_OVERLAP_THRESHOLD, TIP_RADIUS)) continue;
 
         const threshold = pad.velocityThreshold / this.sensitivityMultiplier;
         if (velocityY < threshold) continue;
