@@ -12,6 +12,7 @@ import DistanceBanner from './DistanceBanner';
 import SettingsPanel from './SettingsPanel';
 import InstrumentSelector from './InstrumentSelector';
 import { drawPad, drawRipple, drawLandmarks, type RippleState } from '../utils/canvas';
+import { pointInRegion } from '../utils/geometry';
 
 type Stage = 'idle' | 'loading' | 'calibrating' | 'playing';
 
@@ -57,6 +58,30 @@ export default function PlaygroundPage() {
     [setDetectorSensitivity],
   );
 
+  // Tap-to-test: clicking on canvas plays the pad under the cursor
+  const handleCanvasClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (stage !== 'playing') return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const nx = (e.clientX - rect.left) / rect.width;
+      const ny = (e.clientY - rect.top) / rect.height;
+
+      // Resume audio on any click (user gesture)
+      resumeAudio();
+
+      for (const pad of drumKitConfig.pads) {
+        if (pointInRegion(nx, ny, pad.region)) {
+          engineRef.current?.play(pad.id, 0.8);
+          break;
+        }
+      }
+    },
+    [stage, engineRef, resumeAudio],
+  );
+
   // Process hits when playing
   useEffect(() => {
     if (stage === 'playing' && frame) {
@@ -83,9 +108,6 @@ export default function PlaygroundPage() {
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // These components draw onto the canvas via effects
-      // We trigger re-render by passing ctx through state would be wasteful,
-      // so we draw directly here
       const w = canvas.width;
       const h = canvas.height;
 
@@ -129,7 +151,7 @@ export default function PlaygroundPage() {
 
   return (
     <div className="relative w-full h-full">
-      <CameraView ref={videoRef} canvasRef={canvasRef} />
+      <CameraView ref={videoRef} canvasRef={canvasRef} onCanvasClick={handleCanvasClick} />
 
       {stage === 'loading' && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">

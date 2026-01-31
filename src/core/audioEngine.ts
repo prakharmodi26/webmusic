@@ -34,11 +34,16 @@ export class AudioEngine {
     const buffer = this.soundBank[padId];
     if (!buffer) return;
 
+    // Auto-resume if browser suspended the context
+    if (this.context.state === 'suspended') {
+      this.context.resume();
+    }
+
     const source = this.context.createBufferSource();
     const gain = this.context.createGain();
 
     source.buffer = buffer;
-    gain.gain.value = Math.max(0.1, Math.min(1, velocity));
+    gain.gain.value = Math.max(0.15, Math.min(1, velocity));
 
     source.connect(gain);
     gain.connect(this.context.destination);
@@ -49,6 +54,10 @@ export class AudioEngine {
     if (this.context?.state === 'suspended') {
       await this.context.resume();
     }
+  }
+
+  getSampleIds(): string[] {
+    return Object.keys(this.soundBank);
   }
 
   destroy(): void {
