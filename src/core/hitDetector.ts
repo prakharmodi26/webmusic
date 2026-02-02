@@ -1,17 +1,10 @@
 import type { TrackingFrame, Point3D } from '../types/hand';
 import type { PadConfig, HitEvent } from '../types/instrument';
-import { pointOverlapsRegion } from '../utils/geometry';
+import { distance2D } from '../utils/geometry';
 import { recognizeGesture } from './gestureRecognizer';
 
-/** Minimum overlap threshold (30%) to trigger a hit. */
-const HIT_OVERLAP_THRESHOLD = 0.3;
-
-/**
- * How long (ms) the fist must dwell inside a pad before it triggers.
- * This prevents accidental triggers when sweeping past a pad on the way
- * to another one.
- */
-const DWELL_TIME_MS = 120;
+/** The trigger zone is 60% of the visual pad radius. */
+const HITBOX_RATIO = 0.6;
 
 /**
  * Compute the center of the fist as the centroid of
@@ -42,8 +35,6 @@ export function getFistRadius(landmarks: Point3D[]): number {
 export class HitDetector {
   /** Tracks whether each hand has already triggered each pad. Key: `${handIndex}-${padId}` */
   private triggered: Map<string, boolean> = new Map();
-  /** Timestamp when the fist first entered each pad. Key: `${handIndex}-${padId}` */
-  private enterTime: Map<string, number> = new Map();
 
   update(frame: TrackingFrame, pads: PadConfig[]): HitEvent[] {
     const hits: HitEvent[] = [];
@@ -56,56 +47,33 @@ export class HitDetector {
       if (gesture !== 'fist') {
         // Clear all states for this hand when not a fist
         for (const pad of pads) {
-          const key = `${hi}-${pad.id}`;
-          this.triggered.delete(key);
-          this.enterTime.delete(key);
+          this.triggered.delete(`${hi}-${pad.id}`);
         }
         continue;
       }
 
       const center = getFistCenter(hand.landmarks);
-      const radius = getFistRadius(hand.landmarks);
 
       for (const pad of pads) {
         const key = `${hi}-${pad.id}`;
-        const isInside = pointOverlapsRegion(
-          center.x,
-          center.y,
-          pad.region,
-          HIT_OVERLAP_THRESHOLD,
-          radius,
-        );
+        const dist = distance2D(center, { x: pad.region.cx, y: pad.region.cy });
+        const innerRadius = pad.region.radius * HITBOX_RATIO;
 
-        if (!isInside) {
-          // Left the pad — reset so it can trigger again next time
+        if (dist <= innerRadius) {
+          // Fist center is inside the inner hitbox
+          if (!this.triggered.get(key)) {
+            this.triggered.set(key, true);
+            hits.push({
+              padId: pad.id,
+              timestamp: frame.timestamp,
+              handIndex: hi,
+            });
+          }
+        } else if (dist > pad.region.radius) {
+          // Fist center is outside the full visual radius — allow re-trigger
           this.triggered.delete(key);
-          this.enterTime.delete(key);
-          continue;
         }
-
-        // Fist is inside the pad
-        if (this.triggered.get(key)) {
-          // Already fired for this entry — do nothing until fist leaves
-          continue;
-        }
-
-        const enteredAt = this.enterTime.get(key);
-        if (enteredAt === undefined) {
-          // Just entered — record timestamp, don't fire yet
-          this.enterTime.set(key, frame.timestamp);
-          continue;
-        }
-
-        // Check dwell time
-        if (frame.timestamp - enteredAt >= DWELL_TIME_MS) {
-          // Fist has been inside long enough — trigger
-          this.triggered.set(key, true);
-          hits.push({
-            padId: pad.id,
-            timestamp: frame.timestamp,
-            handIndex: hi,
-          });
-        }
+        // Between innerRadius and full radius: do nothing (hysteresis zone)
       }
     }
 
@@ -114,6 +82,5 @@ export class HitDetector {
 
   reset(): void {
     this.triggered.clear();
-    this.enterTime.clear();
   }
 }
