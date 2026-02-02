@@ -1,104 +1,73 @@
-import type { Point3D } from '../types/hand';
 import type { PadConfig } from '../types/instrument';
 
-/** How far the stick extends past the fist (as a fraction of palm length). */
-const STICK_LENGTH_MULTIPLIER = 1.2;
-
-/** Draw a drumstick that appears to come out of the hand naturally. */
-export function drawDrumstick(
+/** Draw a fist circle indicator on the canvas. */
+export function drawFistIndicator(
   ctx: CanvasRenderingContext2D,
-  landmarks: Point3D[],
-  _tipX: number,
-  _tipY: number,
+  cx: number,
+  cy: number,
+  radius: number,
   width: number,
   height: number,
 ): void {
-  const wrist = landmarks[0];
-  const indexMcp = landmarks[5];
-  const middleMcp = landmarks[9];
-  const pinkyMcp = landmarks[17];
-  
-  // Calculate the center of the palm (between index and pinky MCP)
-  const palmCenterX = ((indexMcp.x + pinkyMcp.x) / 2) * width;
-  const palmCenterY = ((indexMcp.y + pinkyMcp.y) / 2) * height;
-  
-  // Stick starts from the pinky side of the fist (where you'd grip a drumstick)
-  const gripX = ((pinkyMcp.x * 0.7 + wrist.x * 0.3)) * width;
-  const gripY = ((pinkyMcp.y * 0.7 + wrist.y * 0.3)) * height;
-  
-  // Calculate direction from wrist through middle MCP
-  const dirX = middleMcp.x - wrist.x;
-  const dirY = middleMcp.y - wrist.y;
-  const dirLen = Math.sqrt(dirX * dirX + dirY * dirY);
-  
-  // Normalize and extend for the stick tip
-  const stickLength = dirLen * width * STICK_LENGTH_MULTIPLIER;
-  const normalizedDirX = dirX / dirLen;
-  const normalizedDirY = dirY / dirLen;
-  
-  // Tip position
-  const endX = palmCenterX + normalizedDirX * stickLength;
-  const endY = palmCenterY + normalizedDirY * stickLength;
-  
-  // Draw stick shadow for depth
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(gripX + 2, gripY + 2);
-  ctx.lineTo(endX + 2, endY + 2);
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.lineWidth = 5;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-  ctx.restore();
+  const px = cx * width;
+  const py = cy * height;
+  const r = radius * Math.min(width, height);
 
-  // Stick shaft - tapered wooden look
-  const grad = ctx.createLinearGradient(gripX, gripY, endX, endY);
-  grad.addColorStop(0, '#5D4037'); // Dark brown at grip
-  grad.addColorStop(0.2, '#8D6E63'); // Medium brown
-  grad.addColorStop(0.6, '#A1887F'); // Lighter brown
-  grad.addColorStop(0.85, '#BCAAA4'); // Light at tip area
-  grad.addColorStop(1, '#D7CCC8'); // Lightest at tip
-
-  // Draw the main stick body with slight taper
+  // Outer glow
   ctx.beginPath();
-  ctx.moveTo(gripX, gripY);
-  ctx.lineTo(endX, endY);
-  ctx.strokeStyle = grad;
-  ctx.lineWidth = 4;
-  ctx.lineCap = 'round';
+  ctx.arc(px, py, r + 4, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  ctx.lineWidth = 6;
   ctx.stroke();
 
-  // Inner highlight for 3D effect
+  // Main circle
   ctx.beginPath();
-  ctx.moveTo(gripX, gripY);
-  ctx.lineTo(endX, endY);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+  ctx.arc(px, py, r, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255, 100, 150, 0.7)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Inner fill
+  ctx.beginPath();
+  ctx.arc(px, py, r, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 100, 150, 0.12)';
+  ctx.fill();
+
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(px, py, 3, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 100, 150, 0.9)';
+  ctx.fill();
+}
+
+/** Draw a resize handle at the bottom-right of a pad. */
+export function drawResizeHandle(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  padRadius: number,
+  width: number,
+  height: number,
+): void {
+  const px = cx * width + padRadius * Math.min(width, height) * 0.7;
+  const py = cy * height + padRadius * Math.min(width, height) * 0.7;
+  const size = 8;
+
+  ctx.beginPath();
+  ctx.arc(px, py, size, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Diagonal arrows icon
+  ctx.beginPath();
+  ctx.moveTo(px - 3, py + 3);
+  ctx.lineTo(px + 3, py - 3);
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
   ctx.lineWidth = 1.5;
-  ctx.lineCap = 'round';
   ctx.stroke();
-
-  // Stick tip (oval bead)
-  const tipRadius = 5;
-  ctx.beginPath();
-  ctx.ellipse(endX, endY, tipRadius, tipRadius * 0.8, Math.atan2(normalizedDirY, normalizedDirX), 0, Math.PI * 2);
-  
-  const tipGrad = ctx.createRadialGradient(endX - 1, endY - 1, 0, endX, endY, tipRadius);
-  tipGrad.addColorStop(0, '#FFFFFF');
-  tipGrad.addColorStop(0.3, '#F5F5F5');
-  tipGrad.addColorStop(0.7, '#D7CCC8');
-  tipGrad.addColorStop(1, '#BCAAA4');
-  
-  ctx.fillStyle = tipGrad;
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(139, 90, 43, 0.6)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Subtle glow around tip for visibility
-  ctx.beginPath();
-  ctx.arc(endX, endY, tipRadius + 3, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-  ctx.fill();
 }
 
 // ── Drum Kit Drawing ──

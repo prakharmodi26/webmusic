@@ -3,8 +3,6 @@ import type { PadConfig } from '../types/instrument';
 interface SettingsPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  sensitivity: number;
-  onSensitivityChange: (value: number) => void;
   beginnerMode: boolean;
   onBeginnerModeChange: (value: boolean) => void;
   pads: PadConfig[];
@@ -14,8 +12,6 @@ interface SettingsPanelProps {
 export default function SettingsPanel({
   isOpen,
   onClose,
-  sensitivity,
-  onSensitivityChange,
   beginnerMode,
   onBeginnerModeChange,
   pads,
@@ -36,21 +32,6 @@ export default function SettingsPanel({
       </div>
 
       <div className="space-y-6">
-        <div>
-          <label className="block text-sm font-semibold text-gray-300 mb-2">
-            Sensitivity: {sensitivity.toFixed(1)}x
-          </label>
-          <input
-            type="range"
-            min="0.3"
-            max="3"
-            step="0.1"
-            value={sensitivity}
-            onChange={(e) => onSensitivityChange(parseFloat(e.target.value))}
-            className="w-full accent-pink-500"
-          />
-        </div>
-
         <div>
           <label className="flex items-center gap-3 cursor-pointer">
             <input

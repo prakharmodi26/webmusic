@@ -14,6 +14,3 @@ export const DISTANCE_THRESHOLDS = {
   tooFar: 0.05,
 };
 
-export const VELOCITY_BUFFER_SIZE = 5;
-// Velocity thresholds are now in normalized-units per second
-export const MAX_VELOCITY = 3.0;

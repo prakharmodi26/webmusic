@@ -52,15 +52,11 @@ export function useHitDetection(
     [audioEngineRef, pads],
   );
 
-  const setSensitivity = useCallback((value: number) => {
-    detectorRef.current.setSensitivity(value);
-  }, []);
-
   useEffect(() => {
     return () => {
       activeTimers.current.forEach((t) => clearTimeout(t));
     };
   }, []);
 
-  return { processFrame, activePads, ripples, setRipples, setSensitivity };
+  return { processFrame, activePads, ripples, setRipples };
 }
