@@ -12,8 +12,6 @@ export interface PadConfig {
   region: PadRegion;
   soundFile: string;
   color: string;
-  cooldownMs: number;
-  velocityThreshold: number;
   shape: DrumShape;
 }
 
@@ -25,7 +23,6 @@ export interface InstrumentConfig {
 
 export interface HitEvent {
   padId: string;
-  velocity: number;
   timestamp: number;
   handIndex: number;
 }

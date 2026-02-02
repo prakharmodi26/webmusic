@@ -19,7 +19,7 @@ export function useHitDetection(
       const hits = detectorRef.current.update(frame, pads);
 
       for (const hit of hits) {
-        audioEngineRef.current?.play(hit.padId, hit.velocity);
+        audioEngineRef.current?.play(hit.padId);
 
         const pad = pads.find((p) => p.id === hit.padId);
         if (pad) {

@@ -6,9 +6,6 @@ import { recognizeGesture } from './gestureRecognizer';
 /** Minimum overlap threshold (30%) to trigger a hit. */
 const HIT_OVERLAP_THRESHOLD = 0.3;
 
-/** Fixed velocity for all fist hits (no motion tracking). */
-const FIXED_HIT_VELOCITY = 0.8;
-
 /**
  * Compute the center of the fist as the centroid of
  * wrist (0) and the 4 MCP joints (5, 9, 13, 17).
@@ -73,7 +70,6 @@ export class HitDetector {
           // Entered the pad — trigger hit
           hits.push({
             padId: pad.id,
-            velocity: FIXED_HIT_VELOCITY,
             timestamp: frame.timestamp,
             handIndex: hi,
           });
