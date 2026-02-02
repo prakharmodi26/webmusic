@@ -7,6 +7,13 @@ import { recognizeGesture } from './gestureRecognizer';
 const HIT_OVERLAP_THRESHOLD = 0.3;
 
 /**
+ * How long (ms) the fist must dwell inside a pad before it triggers.
+ * This prevents accidental triggers when sweeping past a pad on the way
+ * to another one.
+ */
+const DWELL_TIME_MS = 120;
+
+/**
  * Compute the center of the fist as the centroid of
  * wrist (0) and the 4 MCP joints (5, 9, 13, 17).
  */
@@ -33,8 +40,10 @@ export function getFistRadius(landmarks: Point3D[]): number {
 }
 
 export class HitDetector {
-  /** Tracks whether each hand is currently inside each pad. Key: `${handIndex}-${padId}` */
-  private insideState: Map<string, boolean> = new Map();
+  /** Tracks whether each hand has already triggered each pad. Key: `${handIndex}-${padId}` */
+  private triggered: Map<string, boolean> = new Map();
+  /** Timestamp when the fist first entered each pad. Key: `${handIndex}-${padId}` */
+  private enterTime: Map<string, number> = new Map();
 
   update(frame: TrackingFrame, pads: PadConfig[]): HitEvent[] {
     const hits: HitEvent[] = [];
@@ -45,9 +54,11 @@ export class HitDetector {
 
       // Only closed fist triggers hits
       if (gesture !== 'fist') {
-        // Clear all inside states for this hand when not a fist
+        // Clear all states for this hand when not a fist
         for (const pad of pads) {
-          this.insideState.set(`${hi}-${pad.id}`, false);
+          const key = `${hi}-${pad.id}`;
+          this.triggered.delete(key);
+          this.enterTime.delete(key);
         }
         continue;
       }
@@ -57,7 +68,6 @@ export class HitDetector {
 
       for (const pad of pads) {
         const key = `${hi}-${pad.id}`;
-        const wasInside = this.insideState.get(key) ?? false;
         const isInside = pointOverlapsRegion(
           center.x,
           center.y,
@@ -66,16 +76,36 @@ export class HitDetector {
           radius,
         );
 
-        if (isInside && !wasInside) {
-          // Entered the pad — trigger hit
+        if (!isInside) {
+          // Left the pad — reset so it can trigger again next time
+          this.triggered.delete(key);
+          this.enterTime.delete(key);
+          continue;
+        }
+
+        // Fist is inside the pad
+        if (this.triggered.get(key)) {
+          // Already fired for this entry — do nothing until fist leaves
+          continue;
+        }
+
+        const enteredAt = this.enterTime.get(key);
+        if (enteredAt === undefined) {
+          // Just entered — record timestamp, don't fire yet
+          this.enterTime.set(key, frame.timestamp);
+          continue;
+        }
+
+        // Check dwell time
+        if (frame.timestamp - enteredAt >= DWELL_TIME_MS) {
+          // Fist has been inside long enough — trigger
+          this.triggered.set(key, true);
           hits.push({
             padId: pad.id,
             timestamp: frame.timestamp,
             handIndex: hi,
           });
         }
-
-        this.insideState.set(key, isInside);
       }
     }
 
@@ -83,6 +113,7 @@ export class HitDetector {
   }
 
   reset(): void {
-    this.insideState.clear();
+    this.triggered.clear();
+    this.enterTime.clear();
   }
 }
