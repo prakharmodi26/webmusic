@@ -23,7 +23,7 @@ const instruments: InstrumentCard[] = [
     description: 'Classic drum kit with cymbals',
     gradient: 'from-pink-500 to-purple-600',
     icon: (
-      <img src="public/svg/drums.svg" alt="Drums" className="w-20 h-20 object-contain" />
+      <img src="/svg/drums.svg" alt="Drums" className="w-20 h-20 object-contain" />
       /* Old SVG (commented out):
       <svg viewBox="0 0 64 64" className="w-20 h-20" fill="currentColor">
         <ellipse cx="32" cy="40" rx="24" ry="8" fill="#CCCCCC" />
@@ -41,7 +41,7 @@ const instruments: InstrumentCard[] = [
     description: 'Indian classical percussion',
     gradient: 'from-amber-600 to-orange-700',
     icon: (
-      <img src="public/svg/tabla.svg" alt="Tabla" className="w-20 h-20 object-contain" />
+      <img src="/svg/tabla.svg" alt="Tabla" className="w-20 h-20 object-contain" />
       /* Old SVG (commented out):
       <svg viewBox="0 0 64 64" className="w-20 h-20" fill="currentColor">
         <ellipse cx="42" cy="40" rx="14" ry="5" fill="#8B4513" />
@@ -237,7 +237,7 @@ export default function InstrumentHome({ onSelectInstrument, error }: Instrument
             {/* Fist for Drums/Tabla */}
             <div className="flex flex-col items-center gap-2">
               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4A6B7C] to-[#3D5A6A] border-2 border-[#5D7D8A] flex items-center justify-center overflow-hidden p-2">
-                <img src="public/svg/fist.svg" alt="Fist gesture" className="w-14 h-14 object-contain" />
+                <img src="/svg/fist.svg" alt="Fist gesture" className="w-14 h-14 object-contain" />
                 {/* Old Detailed Fist SVG (commented out):
                 <svg viewBox="0 0 64 64" className="w-12 h-12">
                   <path d="M16 32 C16 24 20 20 28 20 L36 20 C44 20 48 24 48 32 L48 40 C48 50 42 54 32 54 C22 54 16 50 16 40 Z" fill="#F0C5A8"/>
@@ -265,7 +265,7 @@ export default function InstrumentHome({ onSelectInstrument, error }: Instrument
             {/* Index Finger for Tiles */}
             <div className="flex flex-col items-center gap-2">
               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4A6B7C] to-[#3D5A6A] border-2 border-[#5D7D8A] flex items-center justify-center overflow-hidden p-2">
-                <img src="public/svg/finger.svg" alt="Index finger gesture" className="w-14 h-14 object-contain" />
+                <img src="/svg/finger.svg" alt="Index finger gesture" className="w-14 h-14 object-contain" />
                 {/* Old Detailed Index Finger SVG (commented out):
                 <svg viewBox="0 0 64 64" className="w-12 h-12">
                   <path d="M26 8 C26 8 26 6 32 6 C38 6 38 8 38 8 L38 42 C38 46 36 48 32 48 C28 48 26 46 26 42 Z" fill="#F0C5A8"/>
