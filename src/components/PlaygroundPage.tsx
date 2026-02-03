@@ -5,13 +5,14 @@ import { useHitDetection } from '../hooks/useHitDetection';
 import { useAudio } from '../hooks/useAudio';
 import { useDistanceGuide } from '../hooks/useDistanceGuide';
 import { drumKitConfig } from '../config/instruments/drumKit';
-import type { PadConfig, PadRegion } from '../types/instrument';
-import StartScreen from './StartScreen';
+import { tablaConfig } from '../config/instruments/tabla';
+import { customConfig, generatePadId, customPadColors } from '../config/instruments/custom';
+import type { PadConfig, PadRegion, InstrumentConfig, DrumShape } from '../types/instrument';
+import InstrumentHome, { type InstrumentType } from './InstrumentHome';
 import CameraView from './CameraView';
 import CalibrationOverlay from './CalibrationOverlay';
 import DistanceBanner from './DistanceBanner';
 import SettingsPanel from './SettingsPanel';
-import InstrumentSelector from './InstrumentSelector';
 import { drawPad, drawRipple, drawFistIndicator, drawResizeHandle, type RippleState } from '../utils/canvas';
 import { pointInRegion } from '../utils/geometry';
 import { recognizeGesture } from '../core/gestureRecognizer';
@@ -35,48 +36,120 @@ interface ResizeState {
   startDist: number;
 }
 
+function getInstrumentConfig(type: InstrumentType): InstrumentConfig {
+  switch (type) {
+    case 'drums':
+      return drumKitConfig;
+    case 'tabla':
+      return tablaConfig;
+    case 'custom':
+      return customConfig;
+  }
+}
+
 export default function PlaygroundPage() {
   const [stage, setStage] = useState<Stage>('idle');
+  const [selectedInstrument, setSelectedInstrument] = useState<InstrumentType | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [beginnerMode, setBeginnerMode] = useState(false);
+  const [sensitivity, setSensitivity] = useState(0.6);
 
   // Movable/resizable pad state: overrides for position and radius
   const [padPositions, setPadPositions] = useState<Map<string, { cx: number; cy: number }>>(new Map());
   const [padRadii, setPadRadii] = useState<Map<string, number>>(new Map());
+
+  // Custom mode: store pads array separately (starts empty)
+  const [customPads, setCustomPads] = useState<PadConfig[]>([]);
+
+  // Tabla sound overrides
+  const [tablaSoundOverrides, setTablaSoundOverrides] = useState<Map<string, string>>(new Map());
+
+  // Pad menu for custom mode
+  const [padMenuOpen, setPadMenuOpen] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number>(0);
   const dragRef = useRef<DragState | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
   const wasDraggingRef = useRef(false);
+  const wasResizeClickRef = useRef(false);
 
   const { videoRef, isActive: cameraActive, error: cameraError, start: startCamera } = useCamera();
   const { frame, isLoading: trackingLoading, isReady: trackingReady, init: initTracking, startLoop } = useHandTracking(videoRef);
   const { engineRef, isLoaded: audioLoaded, init: initAudio, loadCustomSample, resume: resumeAudio } = useAudio();
 
-  // Build current pads array with overridden positions/radii
+  // Get base config for selected instrument
+  const instrumentConfig = selectedInstrument ? getInstrumentConfig(selectedInstrument) : null;
+
+  // Build current pads array with overridden positions/radii/sounds
   const currentPads: PadConfig[] = useMemo(() => {
-    return drumKitConfig.pads.map((pad) => {
+    if (!selectedInstrument) return [];
+
+    // For custom mode, use customPads state
+    if (selectedInstrument === 'custom') {
+      return customPads.map((pad) => {
+        const pos = padPositions.get(pad.id);
+        const rad = padRadii.get(pad.id);
+        const region: PadRegion = {
+          cx: pos?.cx ?? pad.region.cx,
+          cy: pos?.cy ?? pad.region.cy,
+          radius: rad ?? pad.region.radius,
+        };
+        return { ...pad, region };
+      });
+    }
+
+    // For drums and tabla
+    const basePads = selectedInstrument === 'tabla' ? tablaConfig.pads : drumKitConfig.pads;
+    return basePads.map((pad) => {
       const pos = padPositions.get(pad.id);
       const rad = padRadii.get(pad.id);
+      const soundOverride = selectedInstrument === 'tabla' ? tablaSoundOverrides.get(pad.id) : undefined;
       const region: PadRegion = {
         cx: pos?.cx ?? pad.region.cx,
         cy: pos?.cy ?? pad.region.cy,
         radius: rad ?? pad.region.radius,
       };
-      return { ...pad, region };
+      return {
+        ...pad,
+        region,
+        soundFile: soundOverride ?? pad.soundFile,
+      };
     });
-  }, [padPositions, padRadii]);
+  }, [selectedInstrument, customPads, padPositions, padRadii, tablaSoundOverrides]);
 
-  const { processFrame, activePads, ripples, setRipples } = useHitDetection(engineRef, currentPads);
+  const { processFrame, activePads, ripples, setRipples } = useHitDetection(engineRef, currentPads, sensitivity);
   const distanceStatus = useDistanceGuide(frame);
 
-  const handleStart = useCallback(async () => {
+  // Handle instrument selection
+  const handleSelectInstrument = useCallback(async (instrument: InstrumentType) => {
+    setSelectedInstrument(instrument);
     setStage('loading');
+
+    // Reset position/radius overrides for new instrument
+    setPadPositions(new Map());
+    setPadRadii(new Map());
+
     await startCamera();
     await initTracking();
-    await initAudio(drumKitConfig.pads);
+
+    // Get pads to load audio for
+    const padsToLoad = instrument === 'custom' ? [] : getInstrumentConfig(instrument).pads;
+    await initAudio(padsToLoad);
   }, [startCamera, initTracking, initAudio]);
+
+  // Handle going back to home
+  const handleGoHome = useCallback(() => {
+    setStage('idle');
+    setSelectedInstrument(null);
+    setSettingsOpen(false);
+    setPadMenuOpen(false);
+    // Reset custom pads when going home
+    setCustomPads([]);
+    setPadPositions(new Map());
+    setPadRadii(new Map());
+    setTablaSoundOverrides(new Map());
+  }, []);
 
   useEffect(() => {
     if (cameraActive && trackingReady && audioLoaded && stage === 'loading') {
@@ -89,6 +162,57 @@ export default function PlaygroundPage() {
     resumeAudio();
     setStage('playing');
   }, [resumeAudio]);
+
+  // ── Custom Mode: Add Pad ──
+  const handleAddPad = useCallback((shape: DrumShape = 'drum') => {
+    const shapeLabels: Record<DrumShape, string> = {
+      drum: 'Drum',
+      cymbal: 'Cymbal',
+      hihat: 'Hi-Hat',
+      tabla: 'Tabla',
+    };
+    const newPad: PadConfig = {
+      id: generatePadId(),
+      label: `${shapeLabels[shape]} ${customPads.length + 1}`,
+      region: { cx: 0.5, cy: 0.5, radius: 0.12 },
+      soundFile: '', // No sound until user uploads
+      color: customPadColors[customPads.length % customPadColors.length],
+      shape,
+    };
+    setCustomPads((prev) => [...prev, newPad]);
+    setPadMenuOpen(false);
+  }, [customPads.length]);
+
+  // ── Custom Mode: Delete Pad ──
+  const handleDeletePad = useCallback((padId: string) => {
+    setCustomPads((prev) => prev.filter((p) => p.id !== padId));
+    setPadPositions((prev) => {
+      const next = new Map(prev);
+      next.delete(padId);
+      return next;
+    });
+    setPadRadii((prev) => {
+      const next = new Map(prev);
+      next.delete(padId);
+      return next;
+    });
+  }, []);
+
+  // ── Custom Mode: Change Pad Color ──
+  const handlePadColorChange = useCallback((padId: string, color: string) => {
+    setCustomPads((prev) =>
+      prev.map((p) => (p.id === padId ? { ...p, color } : p))
+    );
+  }, []);
+
+  // ── Tabla: Change Sound ──
+  const handleTablaSoundChange = useCallback(async (padId: string, soundFile: string) => {
+    setTablaSoundOverrides((prev) => new Map(prev).set(padId, soundFile));
+    // Load the new sound
+    if (engineRef.current) {
+      await engineRef.current.loadSample(padId, soundFile);
+    }
+  }, [engineRef]);
 
   // ── Helpers to convert mouse/touch to normalized coords ──
 
@@ -104,11 +228,13 @@ export default function PlaygroundPage() {
 
   // Check if a point is near the resize handle of a pad
   const hitResizeHandle = useCallback((nx: number, ny: number, pad: PadConfig): boolean => {
-    const handleX = pad.region.cx + pad.region.radius * 0.7;
-    const handleY = pad.region.cy + pad.region.radius * 0.7;
+    // Match the position in canvas.ts drawResizeHandle (0.85 offset)
+    const handleX = pad.region.cx + pad.region.radius * 0.85;
+    const handleY = pad.region.cy + pad.region.radius * 0.85;
     const dx = nx - handleX;
     const dy = ny - handleY;
-    return Math.sqrt(dx * dx + dy * dy) < 0.03;
+    // Larger hit area (0.05) for easier grabbing
+    return Math.sqrt(dx * dx + dy * dy) < 0.05;
   }, []);
 
   // ── Drag & Resize handlers ──
@@ -116,6 +242,7 @@ export default function PlaygroundPage() {
   const handleDragStart = useCallback((clientX: number, clientY: number) => {
     if (stage !== 'playing') return;
     const { nx, ny } = getNormalized(clientX, clientY);
+    wasResizeClickRef.current = false;
 
     // Check resize handles first
     for (const pad of currentPads) {
@@ -129,6 +256,7 @@ export default function PlaygroundPage() {
           startDist: dist,
         };
         wasDraggingRef.current = false;
+        wasResizeClickRef.current = true; // Mark that we clicked on resize handle
         return;
       }
     }
@@ -208,12 +336,14 @@ export default function PlaygroundPage() {
     handleDragEnd();
   }, [handleDragEnd]);
 
-  // Tap-to-test: clicking on canvas plays the pad under the cursor (skip if was dragging)
+  // Tap-to-test: clicking on canvas plays the pad under the cursor (skip if was dragging/resizing)
   const handleCanvasClick = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (stage !== 'playing') return;
-      if (wasDraggingRef.current) {
+      // Skip if we were dragging or clicked on resize handle
+      if (wasDraggingRef.current || wasResizeClickRef.current) {
         wasDraggingRef.current = false;
+        wasResizeClickRef.current = false;
         return;
       }
       const canvas = canvasRef.current;
@@ -222,6 +352,13 @@ export default function PlaygroundPage() {
       const rect = canvas.getBoundingClientRect();
       const nx = (e.clientX - rect.left) / rect.width;
       const ny = (e.clientY - rect.top) / rect.height;
+
+      // Don't play if clicking on a resize handle
+      for (const pad of currentPads) {
+        if (hitResizeHandle(nx, ny, pad)) {
+          return;
+        }
+      }
 
       resumeAudio();
 
@@ -232,7 +369,7 @@ export default function PlaygroundPage() {
         }
       }
     },
-    [stage, currentPads, engineRef, resumeAudio],
+    [stage, currentPads, engineRef, resumeAudio, hitResizeHandle],
   );
 
   // Process hits when playing
@@ -304,8 +441,9 @@ export default function PlaygroundPage() {
     return () => cancelAnimationFrame(rafRef.current);
   }, [stage, frame, currentPads, activePads, ripples, setRipples, beginnerMode]);
 
-  if (stage === 'idle') {
-    return <StartScreen onStart={handleStart} error={cameraError} />;
+  // Show home screen when idle and no instrument selected
+  if (stage === 'idle' && !selectedInstrument) {
+    return <InstrumentHome onSelectInstrument={handleSelectInstrument} error={cameraError} />;
   }
 
   return (
@@ -339,8 +477,77 @@ export default function PlaygroundPage() {
 
       {stage === 'playing' && (
         <>
-          <InstrumentSelector current={drumKitConfig.name} />
+          {/* Home button and instrument name */}
+          <div className="absolute top-4 left-4 z-30 flex items-center gap-2">
+            <button
+              onClick={handleGoHome}
+              className="bg-gray-900/70 backdrop-blur-sm w-10 h-10 rounded-full flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+              title="Back to Home"
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+              </svg>
+            </button>
+            <span className="bg-gray-900/70 backdrop-blur-sm px-4 py-2 rounded-full text-sm text-gray-300 font-semibold">
+              {instrumentConfig?.name ?? 'Instrument'}
+            </span>
+          </div>
+
           <DistanceBanner status={distanceStatus} />
+
+          {/* Add Pad menu for custom mode */}
+          {selectedInstrument === 'custom' && (
+            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30">
+              {padMenuOpen && (
+                <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-gray-900/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-gray-700 min-w-[200px]">
+                  <p className="text-gray-400 text-xs font-semibold mb-3 text-center">SELECT PAD TYPE</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => handleAddPad('drum')}
+                      className="flex flex-col items-center gap-1 p-3 rounded-xl bg-gray-800 hover:bg-gray-700 transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-300 to-gray-500 border-2 border-gray-400" />
+                      <span className="text-xs text-gray-300">Drum</span>
+                    </button>
+                    <button
+                      onClick={() => handleAddPad('cymbal')}
+                      className="flex flex-col items-center gap-1 p-3 rounded-xl bg-gray-800 hover:bg-gray-700 transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-700 border-2 border-yellow-500" />
+                      <span className="text-xs text-gray-300">Cymbal</span>
+                    </button>
+                    <button
+                      onClick={() => handleAddPad('hihat')}
+                      className="flex flex-col items-center gap-1 p-3 rounded-xl bg-gray-800 hover:bg-gray-700 transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-300 to-yellow-600 border-2 border-yellow-400 relative">
+                        <div className="absolute inset-1 rounded-full bg-yellow-500/50" />
+                      </div>
+                      <span className="text-xs text-gray-300">Hi-Hat</span>
+                    </button>
+                    <button
+                      onClick={() => handleAddPad('tabla')}
+                      className="flex flex-col items-center gap-1 p-3 rounded-xl bg-gray-800 hover:bg-gray-700 transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-100 to-amber-300 border-2 border-amber-700 flex items-center justify-center">
+                        <div className="w-4 h-4 rounded-full bg-gray-900" />
+                      </div>
+                      <span className="text-xs text-gray-300">Tabla</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={() => setPadMenuOpen((o) => !o)}
+                className={`bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-3 rounded-full font-semibold shadow-lg hover:scale-105 transition-transform flex items-center gap-2 ${padMenuOpen ? 'ring-2 ring-white/50' : ''}`}
+              >
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" className={`transition-transform ${padMenuOpen ? 'rotate-45' : ''}`}>
+                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                </svg>
+                Add Pad
+              </button>
+            </div>
+          )}
 
           <button
             onClick={() => setSettingsOpen((o) => !o)}
@@ -362,6 +569,12 @@ export default function PlaygroundPage() {
             onBeginnerModeChange={setBeginnerMode}
             pads={currentPads}
             onCustomSample={loadCustomSample}
+            instrumentType={selectedInstrument!}
+            sensitivity={sensitivity}
+            onSensitivityChange={setSensitivity}
+            onTablaSoundChange={selectedInstrument === 'tabla' ? handleTablaSoundChange : undefined}
+            onDeletePad={selectedInstrument === 'custom' ? handleDeletePad : undefined}
+            onPadColorChange={selectedInstrument === 'custom' ? handlePadColorChange : undefined}
           />
         </>
       )}

@@ -8,20 +8,26 @@ import type { RippleState } from '../utils/canvas';
 export function useHitDetection(
   audioEngineRef: React.RefObject<AudioEngine | null>,
   pads: PadConfig[],
+  sensitivity: number = 0.6,
 ) {
   const detectorRef = useRef(new HitDetector());
+  const padsRef = useRef(pads);
+  padsRef.current = pads;
+  const sensitivityRef = useRef(sensitivity);
+  sensitivityRef.current = sensitivity;
   const [activePads, setActivePads] = useState<Set<string>>(new Set());
   const [ripples, setRipples] = useState<RippleState[]>([]);
   const activeTimers = useRef<Map<string, number>>(new Map());
 
   const processFrame = useCallback(
     (frame: TrackingFrame) => {
-      const hits = detectorRef.current.update(frame, pads);
+      const currentPads = padsRef.current;
+      const hits = detectorRef.current.update(frame, currentPads, sensitivityRef.current);
 
       for (const hit of hits) {
         audioEngineRef.current?.play(hit.padId);
 
-        const pad = pads.find((p) => p.id === hit.padId);
+        const pad = currentPads.find((p) => p.id === hit.padId);
         if (pad) {
           setActivePads((prev) => new Set(prev).add(hit.padId));
           setRipples((prev) => [
@@ -49,8 +55,14 @@ export function useHitDetection(
         }
       }
     },
-    [audioEngineRef, pads],
+    [audioEngineRef],
   );
+
+  // Reset hit detector state when pad positions/sizes change so stale
+  // triggered entries from old positions don't persist.
+  useEffect(() => {
+    detectorRef.current.reset();
+  }, [pads]);
 
   useEffect(() => {
     return () => {

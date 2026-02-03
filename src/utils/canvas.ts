@@ -49,25 +49,60 @@ export function drawResizeHandle(
   width: number,
   height: number,
 ): void {
-  const px = cx * width + padRadius * Math.min(width, height) * 0.7;
-  const py = cy * height + padRadius * Math.min(width, height) * 0.7;
-  const size = 8;
+  const r = padRadius * Math.min(width, height);
+  const px = cx * width + r * 0.85;
+  const py = cy * height + r * 0.85;
+  const size = 14;
 
+  // Outer glow
+  ctx.beginPath();
+  ctx.arc(px, py, size + 3, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.fill();
+
+  // Button background
   ctx.beginPath();
   ctx.arc(px, py, size, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+  const grad = ctx.createRadialGradient(px - 3, py - 3, 0, px, py, size);
+  grad.addColorStop(0, 'rgba(100, 100, 255, 1)');
+  grad.addColorStop(0.7, 'rgba(70, 70, 200, 1)');
+  grad.addColorStop(1, 'rgba(50, 50, 150, 1)');
+  ctx.fillStyle = grad;
   ctx.fill();
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Diagonal arrows icon
+  // Resize icon (diagonal arrows)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+
+  // Arrow from center to bottom-right
   ctx.beginPath();
-  ctx.moveTo(px - 3, py + 3);
-  ctx.lineTo(px + 3, py - 3);
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
-  ctx.lineWidth = 1.5;
+  ctx.moveTo(px - 1, py - 1);
+  ctx.lineTo(px + 5, py + 5);
   ctx.stroke();
+  // Arrowhead
+  ctx.beginPath();
+  ctx.moveTo(px + 5, py + 1);
+  ctx.lineTo(px + 5, py + 5);
+  ctx.lineTo(px + 1, py + 5);
+  ctx.stroke();
+
+  // Arrow from center to top-left
+  ctx.beginPath();
+  ctx.moveTo(px + 1, py + 1);
+  ctx.lineTo(px - 5, py - 5);
+  ctx.stroke();
+  // Arrowhead
+  ctx.beginPath();
+  ctx.moveTo(px - 5, py - 1);
+  ctx.lineTo(px - 5, py - 5);
+  ctx.lineTo(px - 1, py - 5);
+  ctx.stroke();
+
+  ctx.lineCap = 'butt';
 }
 
 // ── Drum Kit Drawing ──
@@ -265,6 +300,118 @@ function drawCymbalPad(
   }
 }
 
+function drawTablaPad(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  _ry: number,
+  color: string,
+  active: boolean,
+) {
+  const [r, g, b] = hexToRgb(color);
+  const alpha = active ? 1 : 0.9;
+
+  // Outer decorative border (braided leather/rope edge)
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.closePath();
+
+  const borderGrad = ctx.createRadialGradient(cx, cy, radius * 0.85, cx, cy, radius);
+  borderGrad.addColorStop(0, `rgba(${r + 30}, ${g + 20}, ${b + 10}, ${alpha})`);
+  borderGrad.addColorStop(0.3, `rgba(${r}, ${g}, ${b}, ${alpha})`);
+  borderGrad.addColorStop(0.7, `rgba(${r - 20}, ${g - 15}, ${b - 10}, ${alpha})`);
+  borderGrad.addColorStop(1, `rgba(${r - 40}, ${g - 30}, ${b - 20}, ${alpha})`);
+
+  ctx.fillStyle = borderGrad;
+  ctx.fill();
+
+  // Braided pattern on border
+  ctx.strokeStyle = `rgba(${r - 60}, ${g - 50}, ${b - 30}, 0.4)`;
+  ctx.lineWidth = 1;
+  const segments = 24;
+  for (let i = 0; i < segments; i++) {
+    const angle = (i / segments) * Math.PI * 2;
+    const innerR = radius * 0.88;
+    const outerR = radius * 0.98;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(angle) * innerR, cy + Math.sin(angle) * innerR);
+    ctx.lineTo(cx + Math.cos(angle) * outerR, cy + Math.sin(angle) * outerR);
+    ctx.stroke();
+  }
+
+  // Main drum head (pudi) - off-white/cream color like goat skin
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 0.85, 0, Math.PI * 2);
+  ctx.closePath();
+
+  const headGrad = ctx.createRadialGradient(cx - radius * 0.15, cy - radius * 0.15, 0, cx, cy, radius * 0.85);
+  headGrad.addColorStop(0, `rgba(255, 252, 245, ${alpha})`);
+  headGrad.addColorStop(0.3, `rgba(250, 245, 235, ${alpha})`);
+  headGrad.addColorStop(0.6, `rgba(240, 235, 220, ${alpha})`);
+  headGrad.addColorStop(1, `rgba(225, 218, 200, ${alpha})`);
+
+  ctx.fillStyle = headGrad;
+  ctx.fill();
+
+  // Subtle texture on the skin
+  ctx.strokeStyle = 'rgba(200, 190, 170, 0.2)';
+  ctx.lineWidth = 0.5;
+  for (let i = 1; i <= 4; i++) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.85 * (i / 5), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Syahi (black center circle) - the tuning paste
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 0.35, 0, Math.PI * 2);
+  ctx.closePath();
+
+  const syahiGrad = ctx.createRadialGradient(cx - radius * 0.08, cy - radius * 0.08, 0, cx, cy, radius * 0.35);
+  syahiGrad.addColorStop(0, `rgba(60, 55, 50, ${alpha})`);
+  syahiGrad.addColorStop(0.4, `rgba(35, 32, 28, ${alpha})`);
+  syahiGrad.addColorStop(0.8, `rgba(20, 18, 15, ${alpha})`);
+  syahiGrad.addColorStop(1, `rgba(10, 8, 5, ${alpha})`);
+
+  ctx.fillStyle = syahiGrad;
+  ctx.fill();
+
+  // Syahi highlight (subtle shine)
+  ctx.beginPath();
+  ctx.arc(cx - radius * 0.1, cy - radius * 0.1, radius * 0.12, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(80, 75, 70, 0.3)';
+  ctx.fill();
+
+  // Syahi edge definition
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 0.35, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Outer edge of head
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 0.85, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(180, 170, 150, 0.6)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Hit flash effect
+  if (active) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.85, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 1.08, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255, 220, 180, 0.6)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  }
+}
+
 function drawHiHatPad(
   ctx: CanvasRenderingContext2D,
   cx: number,
@@ -365,6 +512,9 @@ export function drawPad(
       break;
     case 'hihat':
       drawHiHatPad(ctx, cx, cy, baseSize, baseSize, pad.color, active);
+      break;
+    case 'tabla':
+      drawTablaPad(ctx, cx, cy, baseSize, baseSize, pad.color, active);
       break;
   }
 

@@ -3,8 +3,8 @@ import type { PadConfig, HitEvent } from '../types/instrument';
 import { distance2D } from '../utils/geometry';
 import { recognizeGesture } from './gestureRecognizer';
 
-/** The trigger zone is 60% of the visual pad radius. */
-const HITBOX_RATIO = 0.6;
+/** Default trigger zone is 60% of the visual pad radius. */
+const DEFAULT_HITBOX_RATIO = 0.6;
 
 /**
  * Compute the center of the fist as the centroid of
@@ -36,7 +36,7 @@ export class HitDetector {
   /** Tracks whether each hand has already triggered each pad. Key: `${handIndex}-${padId}` */
   private triggered: Map<string, boolean> = new Map();
 
-  update(frame: TrackingFrame, pads: PadConfig[]): HitEvent[] {
+  update(frame: TrackingFrame, pads: PadConfig[], sensitivity: number = DEFAULT_HITBOX_RATIO): HitEvent[] {
     const hits: HitEvent[] = [];
 
     for (let hi = 0; hi < frame.hands.length; hi++) {
@@ -57,7 +57,7 @@ export class HitDetector {
       for (const pad of pads) {
         const key = `${hi}-${pad.id}`;
         const dist = distance2D(center, { x: pad.region.cx, y: pad.region.cy });
-        const innerRadius = pad.region.radius * HITBOX_RATIO;
+        const innerRadius = pad.region.radius * sensitivity;
 
         if (dist <= innerRadius) {
           // Fist center is inside the inner hitbox
