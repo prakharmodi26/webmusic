@@ -23,6 +23,8 @@ const instruments: InstrumentCard[] = [
     description: 'Classic drum kit with cymbals',
     gradient: 'from-pink-500 to-purple-600',
     icon: (
+      <img src="public/svg/drums.svg" alt="Drums" className="w-20 h-20 object-contain" />
+      /* Old SVG (commented out):
       <svg viewBox="0 0 64 64" className="w-20 h-20" fill="currentColor">
         <ellipse cx="32" cy="40" rx="24" ry="8" fill="#CCCCCC" />
         <rect x="8" y="24" width="48" height="16" fill="#AAAAAA" />
@@ -30,6 +32,7 @@ const instruments: InstrumentCard[] = [
         <ellipse cx="48" cy="12" rx="12" ry="4" fill="#D4A843" />
         <line x1="48" y1="12" x2="48" y2="24" stroke="#666" strokeWidth="2" />
       </svg>
+      */
     ),
   },
   {
@@ -38,6 +41,8 @@ const instruments: InstrumentCard[] = [
     description: 'Indian classical percussion',
     gradient: 'from-amber-600 to-orange-700',
     icon: (
+      <img src="public/svg/tabla.svg" alt="Tabla" className="w-20 h-20 object-contain" />
+      /* Old SVG (commented out):
       <svg viewBox="0 0 64 64" className="w-20 h-20" fill="currentColor">
         <ellipse cx="42" cy="40" rx="14" ry="5" fill="#8B4513" />
         <rect x="28" y="20" width="28" height="20" rx="2" fill="#A0522D" />
@@ -48,6 +53,7 @@ const instruments: InstrumentCard[] = [
         <ellipse cx="18" cy="22" rx="16" ry="6" fill="#2F1810" />
         <circle cx="18" cy="22" r="8" fill="#1a0d08" />
       </svg>
+      */
     ),
   },
   {
@@ -230,35 +236,27 @@ export default function InstrumentHome({ onSelectInstrument, error }: Instrument
           <div className="flex justify-center gap-8 md:gap-16">
             {/* Fist for Drums/Tabla */}
             <div className="flex flex-col items-center gap-2">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4A6B7C] to-[#3D5A6A] border-2 border-[#5D7D8A] flex items-center justify-center">
-                {/* Detailed Fist SVG */}
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4A6B7C] to-[#3D5A6A] border-2 border-[#5D7D8A] flex items-center justify-center overflow-hidden p-2">
+                <img src="public/svg/fist.svg" alt="Fist gesture" className="w-14 h-14 object-contain" />
+                {/* Old Detailed Fist SVG (commented out):
                 <svg viewBox="0 0 64 64" className="w-12 h-12">
-                  {/* Main fist body */}
-                  <path 
-                    d="M16 32 C16 24 20 20 28 20 L36 20 C44 20 48 24 48 32 L48 40 C48 50 42 54 32 54 C22 54 16 50 16 40 Z" 
-                    fill="#F0C5A8"
-                  />
-                  {/* Thumb */}
+                  <path d="M16 32 C16 24 20 20 28 20 L36 20 C44 20 48 24 48 32 L48 40 C48 50 42 54 32 54 C22 54 16 50 16 40 Z" fill="#F0C5A8"/>
                   <ellipse cx="14" cy="36" rx="6" ry="10" fill="#F0C5A8" />
                   <ellipse cx="13" cy="36" rx="4" ry="8" fill="#E8B69A" />
-                  {/* Finger knuckles - top row */}
                   <ellipse cx="24" cy="22" rx="6" ry="5" fill="#F0C5A8" />
                   <ellipse cx="32" cy="21" rx="6" ry="5" fill="#F0C5A8" />
                   <ellipse cx="40" cy="22" rx="6" ry="5" fill="#F0C5A8" />
-                  {/* Knuckle highlights */}
                   <ellipse cx="24" cy="21" rx="4" ry="3" fill="#F5D0B8" />
                   <ellipse cx="32" cy="20" rx="4" ry="3" fill="#F5D0B8" />
                   <ellipse cx="40" cy="21" rx="4" ry="3" fill="#F5D0B8" />
-                  {/* Knuckle lines/shadows */}
                   <path d="M20 26 Q24 28 28 26" stroke="#DDA68A" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
                   <path d="M28 25 Q32 27 36 25" stroke="#DDA68A" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
                   <path d="M36 26 Q40 28 44 26" stroke="#DDA68A" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-                  {/* Palm shadow */}
                   <path d="M20 34 Q32 38 44 34" stroke="#DDA68A" strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.6"/>
-                  {/* Wrist */}
                   <rect x="24" y="52" width="16" height="8" rx="3" fill="#F0C5A8" />
                   <rect x="26" y="54" width="12" height="4" rx="2" fill="#E8B69A" opacity="0.5"/>
                 </svg>
+                */}
               </div>
               <p className="text-white font-semibold">Fist</p>
               <p className="text-blue-300/70 text-sm">for Drums & Tabla</p>
@@ -266,41 +264,23 @@ export default function InstrumentHome({ onSelectInstrument, error }: Instrument
 
             {/* Index Finger for Tiles */}
             <div className="flex flex-col items-center gap-2">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4A6B7C] to-[#3D5A6A] border-2 border-[#5D7D8A] flex items-center justify-center">
-                {/* Detailed Index Finger SVG */}
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4A6B7C] to-[#3D5A6A] border-2 border-[#5D7D8A] flex items-center justify-center overflow-hidden p-2">
+                <img src="public/svg/finger.svg" alt="Index finger gesture" className="w-14 h-14 object-contain" />
+                {/* Old Detailed Index Finger SVG (commented out):
                 <svg viewBox="0 0 64 64" className="w-12 h-12">
-                  {/* Index finger pointing down */}
-                  <path 
-                    d="M26 8 C26 8 26 6 32 6 C38 6 38 8 38 8 L38 42 C38 46 36 48 32 48 C28 48 26 46 26 42 Z" 
-                    fill="#F0C5A8"
-                  />
-                  {/* Finger highlight (left side) */}
-                  <path 
-                    d="M28 10 L28 40 C28 43 29 45 32 45" 
-                    stroke="#F5D0B8" 
-                    strokeWidth="3" 
-                    fill="none" 
-                    strokeLinecap="round"
-                    opacity="0.7"
-                  />
-                  {/* Fingernail */}
+                  <path d="M26 8 C26 8 26 6 32 6 C38 6 38 8 38 8 L38 42 C38 46 36 48 32 48 C28 48 26 46 26 42 Z" fill="#F0C5A8"/>
+                  <path d="M28 10 L28 40 C28 43 29 45 32 45" stroke="#F5D0B8" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.7"/>
                   <rect x="28" y="8" width="8" height="6" rx="3" fill="#F5D6C6" />
                   <rect x="29" y="9" width="6" height="3" rx="2" fill="#FFE4D6" opacity="0.7"/>
-                  {/* Finger joints */}
                   <path d="M27 20 L37 20" stroke="#DDA68A" strokeWidth="1.5" strokeLinecap="round" opacity="0.6"/>
                   <path d="M27 32 L37 32" stroke="#DDA68A" strokeWidth="1.5" strokeLinecap="round" opacity="0.6"/>
-                  {/* Palm/hand base */}
-                  <path 
-                    d="M22 44 C22 44 20 46 20 52 C20 58 26 60 32 60 C38 60 44 58 44 52 C44 46 42 44 42 44 L38 44 C38 48 36 50 32 50 C28 50 26 48 26 44 Z" 
-                    fill="#F0C5A8"
-                  />
-                  {/* Folded fingers (behind) */}
+                  <path d="M22 44 C22 44 20 46 20 52 C20 58 26 60 32 60 C38 60 44 58 44 52 C44 46 42 44 42 44 L38 44 C38 48 36 50 32 50 C28 50 26 48 26 44 Z" fill="#F0C5A8"/>
                   <ellipse cx="24" cy="52" rx="5" ry="6" fill="#E8B69A" />
                   <ellipse cx="32" cy="54" rx="5" ry="5" fill="#E8B69A" />
                   <ellipse cx="40" cy="52" rx="5" ry="6" fill="#E8B69A" />
-                  {/* Thumb tucked */}
                   <ellipse cx="18" cy="50" rx="4" ry="6" fill="#E8B69A" />
                 </svg>
+                */}
               </div>
               <p className="text-white font-semibold">Index Finger</p>
               <p className="text-blue-300/70 text-sm">for Piano Tiles</p>

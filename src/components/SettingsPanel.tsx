@@ -6,12 +6,12 @@ import { customPadColors } from '../config/instruments/custom';
 // All available preset sounds organized by category
 export const presetSounds = {
   drums: [
-    { id: 'crash', label: 'Crash', file: '/sounds/crash.wav' },
-    { id: 'ride', label: 'Ride', file: '/sounds/ride.wav' },
-    { id: 'snare', label: 'Snare', file: '/sounds/snare.wav' },
-    { id: 'hihat', label: 'Hi-Hat', file: '/sounds/hihat.wav' },
-    { id: 'tom-high', label: 'Tom High', file: '/sounds/tom-high.wav' },
-    { id: 'tom-low', label: 'Tom Low', file: '/sounds/tom-low.wav' },
+    { id: 'crash', label: 'Crash', file: '/sounds/drums/crash.wav' },
+    { id: 'ride', label: 'Ride', file: '/sounds/drums/ride.wav' },
+    { id: 'snare', label: 'Snare', file: '/sounds/drums/snare.wav' },
+    { id: 'hihat', label: 'Hi-Hat', file: '/sounds/drums/hihat.wav' },
+    { id: 'tom-high', label: 'Tom High', file: '/sounds/drums/tom-high.wav' },
+    { id: 'tom-low', label: 'Tom Low', file: '/sounds/drums/tom-low.wav' },
   ],
   tabla: [
     { id: 'na', label: 'Na', file: '/sounds/tabla/Tabla/na.wav' },
