@@ -9,12 +9,15 @@ export function useHitDetection(
   audioEngineRef: React.RefObject<AudioEngine | null>,
   pads: PadConfig[],
   sensitivity: number = 0.6,
+  useFingerTip: boolean = false,
 ) {
   const detectorRef = useRef(new HitDetector());
   const padsRef = useRef(pads);
   padsRef.current = pads;
   const sensitivityRef = useRef(sensitivity);
   sensitivityRef.current = sensitivity;
+  const useFingerTipRef = useRef(useFingerTip);
+  useFingerTipRef.current = useFingerTip;
   const [activePads, setActivePads] = useState<Set<string>>(new Set());
   const [ripples, setRipples] = useState<RippleState[]>([]);
   const activeTimers = useRef<Map<string, number>>(new Map());
@@ -22,7 +25,7 @@ export function useHitDetection(
   const processFrame = useCallback(
     (frame: TrackingFrame) => {
       const currentPads = padsRef.current;
-      const hits = detectorRef.current.update(frame, currentPads, sensitivityRef.current);
+      const hits = detectorRef.current.update(frame, currentPads, sensitivityRef.current, useFingerTipRef.current);
 
       for (const hit of hits) {
         audioEngineRef.current?.play(hit.padId);

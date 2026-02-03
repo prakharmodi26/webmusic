@@ -4,7 +4,7 @@ export interface PadRegion {
   radius: number;
 }
 
-export type DrumShape = 'drum' | 'cymbal' | 'hihat' | 'tabla';
+export type DrumShape = 'drum' | 'cymbal' | 'hihat' | 'tabla' | 'tile';
 
 export interface PadConfig {
   id: string;

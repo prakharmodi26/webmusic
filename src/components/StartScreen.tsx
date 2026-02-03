@@ -8,7 +8,7 @@ export default function StartScreen({ onStart, error }: StartScreenProps) {
     <div className="flex flex-col items-center justify-center h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
       <div className="text-center space-y-8 px-4">
         <h1 className="text-6xl font-extrabold bg-gradient-to-r from-yellow-300 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-          WebMusic
+          AirBeats
         </h1>
         <p className="text-xl text-blue-200 max-w-md mx-auto">
           Play drums with your hands using just your webcam. No controllers needed!

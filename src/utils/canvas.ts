@@ -40,8 +40,8 @@ export function drawFistIndicator(
   ctx.fill();
 }
 
-/** Draw a resize handle at the bottom-right of a pad. */
-export function drawResizeHandle(
+/** Draw a resize corner indicator at the bottom-right of a pad. */
+export function drawResizeCorner(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
@@ -50,57 +50,100 @@ export function drawResizeHandle(
   height: number,
 ): void {
   const r = padRadius * Math.min(width, height);
-  const px = cx * width + r * 0.85;
-  const py = cy * height + r * 0.85;
-  const size = 14;
+  // Position at the bottom-right corner of the pad
+  const cornerX = cx * width + r;
+  const cornerY = cy * height + r;
+  // Size of the corner indicator
+  const size = Math.max(12, Math.min(20, r * 0.2));
 
-  // Outer glow
+  // Draw a small circular background for better visibility
   ctx.beginPath();
-  ctx.arc(px, py, size + 3, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.fill();
-
-  // Button background
-  ctx.beginPath();
-  ctx.arc(px, py, size, 0, Math.PI * 2);
-  const grad = ctx.createRadialGradient(px - 3, py - 3, 0, px, py, size);
-  grad.addColorStop(0, 'rgba(100, 100, 255, 1)');
-  grad.addColorStop(0.7, 'rgba(70, 70, 200, 1)');
-  grad.addColorStop(1, 'rgba(50, 50, 150, 1)');
-  ctx.fillStyle = grad;
+  ctx.arc(cornerX - size/2, cornerY - size/2, size * 0.7, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(80, 80, 200, 0.7)';
   ctx.fill();
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // Resize icon (diagonal arrows)
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+  // Draw corner resize indicator (diagonal lines)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
   ctx.lineWidth = 2;
   ctx.lineCap = 'round';
 
-  // Arrow from center to bottom-right
+  // Draw two diagonal lines inside the circle
+  const lineSize = size * 0.35;
+  const centerOffset = size/2;
   ctx.beginPath();
-  ctx.moveTo(px - 1, py - 1);
-  ctx.lineTo(px + 5, py + 5);
+  ctx.moveTo(cornerX - centerOffset - lineSize, cornerY - centerOffset + lineSize);
+  ctx.lineTo(cornerX - centerOffset + lineSize, cornerY - centerOffset - lineSize);
   ctx.stroke();
-  // Arrowhead
+  
   ctx.beginPath();
-  ctx.moveTo(px + 5, py + 1);
-  ctx.lineTo(px + 5, py + 5);
-  ctx.lineTo(px + 1, py + 5);
+  ctx.moveTo(cornerX - centerOffset - lineSize + 4, cornerY - centerOffset + lineSize - 4);
+  ctx.lineTo(cornerX - centerOffset + lineSize - 4, cornerY - centerOffset - lineSize + 4);
   ctx.stroke();
 
-  // Arrow from center to top-left
-  ctx.beginPath();
-  ctx.moveTo(px + 1, py + 1);
-  ctx.lineTo(px - 5, py - 5);
-  ctx.stroke();
-  // Arrowhead
-  ctx.beginPath();
-  ctx.moveTo(px - 5, py - 1);
-  ctx.lineTo(px - 5, py - 5);
-  ctx.lineTo(px - 1, py - 5);
-  ctx.stroke();
+  ctx.lineCap = 'butt';
+}
+
+/** Draw hand skeleton with landmarks and connections */
+export function drawHandSkeleton(
+  ctx: CanvasRenderingContext2D,
+  landmarks: { x: number; y: number; z: number }[],
+  width: number,
+  height: number,
+): void {
+  // Hand connections (pairs of landmark indices)
+  const connections = [
+    // Thumb
+    [0, 1], [1, 2], [2, 3], [3, 4],
+    // Index finger
+    [0, 5], [5, 6], [6, 7], [7, 8],
+    // Middle finger
+    [0, 9], [9, 10], [10, 11], [11, 12],
+    // Ring finger
+    [0, 13], [13, 14], [14, 15], [15, 16],
+    // Pinky
+    [0, 17], [17, 18], [18, 19], [19, 20],
+    // Palm connections
+    [5, 9], [9, 13], [13, 17],
+  ];
+
+  // Draw connections
+  ctx.strokeStyle = 'rgba(0, 255, 150, 0.7)';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+
+  for (const [start, end] of connections) {
+    const startPoint = landmarks[start];
+    const endPoint = landmarks[end];
+    ctx.beginPath();
+    ctx.moveTo(startPoint.x * width, startPoint.y * height);
+    ctx.lineTo(endPoint.x * width, endPoint.y * height);
+    ctx.stroke();
+  }
+
+  // Draw landmark points
+  for (let i = 0; i < landmarks.length; i++) {
+    const landmark = landmarks[i];
+    const x = landmark.x * width;
+    const y = landmark.y * height;
+    
+    // Fingertips are larger
+    const isFingertip = [4, 8, 12, 16, 20].includes(i);
+    const radius = isFingertip ? 6 : 3;
+
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = isFingertip ? 'rgba(0, 255, 150, 0.9)' : 'rgba(0, 255, 150, 0.7)';
+    ctx.fill();
+    
+    if (isFingertip) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
 
   ctx.lineCap = 'butt';
 }
@@ -412,6 +455,90 @@ function drawTablaPad(
   }
 }
 
+function drawTilePad(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  _ry: number,
+  color: string,
+  active: boolean,
+) {
+  const [r, g, b] = hexToRgb(color);
+  const alpha = active ? 1 : 0.9;
+  const size = radius * 2; // Full width/height
+  const x = cx - radius;
+  const y = cy - radius;
+  const cornerRadius = radius * 0.15;
+
+  // Shadow/depth
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  roundRect(ctx, x + 3, y + 3, size, size, cornerRadius);
+  ctx.fill();
+
+  // Tile background gradient
+  ctx.beginPath();
+  roundRect(ctx, x, y, size, size, cornerRadius);
+
+  const grad = ctx.createLinearGradient(x, y, x + size, y + size);
+  if (active) {
+    grad.addColorStop(0, `rgba(${Math.min(255, r + 60)}, ${Math.min(255, g + 60)}, ${Math.min(255, b + 60)}, ${alpha})`);
+    grad.addColorStop(0.5, `rgba(${Math.min(255, r + 40)}, ${Math.min(255, g + 40)}, ${Math.min(255, b + 40)}, ${alpha})`);
+    grad.addColorStop(1, `rgba(${r + 20}, ${g + 20}, ${b + 20}, ${alpha})`);
+  } else {
+    grad.addColorStop(0, `rgba(${Math.min(255, r + 30)}, ${Math.min(255, g + 30)}, ${Math.min(255, b + 30)}, ${alpha})`);
+    grad.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${alpha})`);
+    grad.addColorStop(1, `rgba(${Math.max(0, r - 30)}, ${Math.max(0, g - 30)}, ${Math.max(0, b - 30)}, ${alpha})`);
+  }
+
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Border
+  ctx.beginPath();
+  roundRect(ctx, x, y, size, size, cornerRadius);
+  ctx.strokeStyle = active ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.3)';
+  ctx.lineWidth = active ? 3 : 1.5;
+  ctx.stroke();
+
+  // Inner highlight (top-left)
+  ctx.beginPath();
+  roundRect(ctx, x + 2, y + 2, size * 0.4, size * 0.15, cornerRadius * 0.5);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.fill();
+
+  // Hit flash
+  if (active) {
+    ctx.beginPath();
+    roundRect(ctx, x - 4, y - 4, size + 8, size + 8, cornerRadius + 4);
+    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.6)`;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  }
+}
+
+// Helper to draw rounded rectangle
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
 function drawHiHatPad(
   ctx: CanvasRenderingContext2D,
   cx: number,
@@ -515,6 +642,9 @@ export function drawPad(
       break;
     case 'tabla':
       drawTablaPad(ctx, cx, cy, baseSize, baseSize, pad.color, active);
+      break;
+    case 'tile':
+      drawTilePad(ctx, cx, cy, baseSize, baseSize, pad.color, active);
       break;
   }
 

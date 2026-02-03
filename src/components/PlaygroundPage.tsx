@@ -7,22 +7,22 @@ import { useDistanceGuide } from '../hooks/useDistanceGuide';
 import { drumKitConfig } from '../config/instruments/drumKit';
 import { tablaConfig } from '../config/instruments/tabla';
 import { customConfig, generatePadId, customPadColors } from '../config/instruments/custom';
+import { tilesConfig } from '../config/instruments/tiles';
 import type { PadConfig, PadRegion, InstrumentConfig, DrumShape } from '../types/instrument';
 import InstrumentHome, { type InstrumentType } from './InstrumentHome';
 import CameraView from './CameraView';
-import CalibrationOverlay from './CalibrationOverlay';
 import DistanceBanner from './DistanceBanner';
 import SettingsPanel from './SettingsPanel';
-import { drawPad, drawRipple, drawFistIndicator, drawResizeHandle, type RippleState } from '../utils/canvas';
+import { drawPad, drawRipple, drawFistIndicator, drawResizeCorner, drawHandSkeleton, type RippleState } from '../utils/canvas';
 import { pointInRegion } from '../utils/geometry';
 import { recognizeGesture } from '../core/gestureRecognizer';
-import { getFistCenter, getFistRadius } from '../core/hitDetector';
+import { getHandCenter, getFistRadius, getIndexFingertip } from '../core/hitDetector';
 
-type Stage = 'idle' | 'loading' | 'calibrating' | 'playing';
+type Stage = 'idle' | 'loading' | 'playing';
 
 /** Hard limits for pad radius (normalized 0-1 space). */
-const MIN_PAD_RADIUS = 0.04;
-const MAX_PAD_RADIUS = 0.25;
+const MIN_PAD_RADIUS = 0.03;
+const MAX_PAD_RADIUS = 0.35;
 
 interface DragState {
   padId: string;
@@ -33,7 +33,8 @@ interface DragState {
 interface ResizeState {
   padId: string;
   startRadius: number;
-  startDist: number;
+  startX: number;
+  startY: number;
 }
 
 function getInstrumentConfig(type: InstrumentType): InstrumentConfig {
@@ -44,6 +45,8 @@ function getInstrumentConfig(type: InstrumentType): InstrumentConfig {
       return tablaConfig;
     case 'custom':
       return customConfig;
+    case 'tiles':
+      return tilesConfig;
   }
 }
 
@@ -99,6 +102,20 @@ export default function PlaygroundPage() {
       });
     }
 
+    // For tiles, use tilesConfig
+    if (selectedInstrument === 'tiles') {
+      return tilesConfig.pads.map((pad) => {
+        const pos = padPositions.get(pad.id);
+        const rad = padRadii.get(pad.id);
+        const region: PadRegion = {
+          cx: pos?.cx ?? pad.region.cx,
+          cy: pos?.cy ?? pad.region.cy,
+          radius: rad ?? pad.region.radius,
+        };
+        return { ...pad, region };
+      });
+    }
+
     // For drums and tabla
     const basePads = selectedInstrument === 'tabla' ? tablaConfig.pads : drumKitConfig.pads;
     return basePads.map((pad) => {
@@ -118,7 +135,10 @@ export default function PlaygroundPage() {
     });
   }, [selectedInstrument, customPads, padPositions, padRadii, tablaSoundOverrides]);
 
-  const { processFrame, activePads, ripples, setRipples } = useHitDetection(engineRef, currentPads, sensitivity);
+  const useFingerTip = selectedInstrument === 'tiles';
+  // Use full pad radius (1.0) for tiles since we want fingertip to trigger on any part of the tile
+  const effectiveSensitivity = selectedInstrument === 'tiles' ? 1.0 : sensitivity;
+  const { processFrame, activePads, ripples, setRipples } = useHitDetection(engineRef, currentPads, effectiveSensitivity, useFingerTip);
   const distanceStatus = useDistanceGuide(frame);
 
   // Handle instrument selection
@@ -133,7 +153,7 @@ export default function PlaygroundPage() {
     await startCamera();
     await initTracking();
 
-    // Get pads to load audio for
+    // Get pads to load audio for (custom starts with no audio - user uploads)
     const padsToLoad = instrument === 'custom' ? [] : getInstrumentConfig(instrument).pads;
     await initAudio(padsToLoad);
   }, [startCamera, initTracking, initAudio]);
@@ -154,14 +174,10 @@ export default function PlaygroundPage() {
   useEffect(() => {
     if (cameraActive && trackingReady && audioLoaded && stage === 'loading') {
       startLoop();
-      setStage('calibrating');
+      resumeAudio();
+      setStage('playing');
     }
-  }, [cameraActive, trackingReady, audioLoaded, stage, startLoop]);
-
-  const handleCalibrationReady = useCallback(() => {
-    resumeAudio();
-    setStage('playing');
-  }, [resumeAudio]);
+  }, [cameraActive, trackingReady, audioLoaded, stage, startLoop, resumeAudio]);
 
   // ── Custom Mode: Add Pad ──
   const handleAddPad = useCallback((shape: DrumShape = 'drum') => {
@@ -170,6 +186,7 @@ export default function PlaygroundPage() {
       cymbal: 'Cymbal',
       hihat: 'Hi-Hat',
       tabla: 'Tabla',
+      tile: 'Tile',
     };
     const newPad: PadConfig = {
       id: generatePadId(),
@@ -205,9 +222,29 @@ export default function PlaygroundPage() {
     );
   }, []);
 
+  // ── Custom Mode: Change Pad Label ──
+  const handlePadLabelChange = useCallback((padId: string, label: string) => {
+    setCustomPads((prev) =>
+      prev.map((p) => (p.id === padId ? { ...p, label } : p))
+    );
+  }, []);
+
   // ── Tabla: Change Sound ──
   const handleTablaSoundChange = useCallback(async (padId: string, soundFile: string) => {
     setTablaSoundOverrides((prev) => new Map(prev).set(padId, soundFile));
+    // Load the new sound
+    if (engineRef.current) {
+      await engineRef.current.loadSample(padId, soundFile);
+    }
+  }, [engineRef]);
+
+  // ── Custom: Change to Preset Sound ──
+  const handlePresetSoundChange = useCallback(async (padId: string, soundFile: string) => {
+    if (!soundFile) return;
+    // Update the pad's soundFile
+    setCustomPads((prev) =>
+      prev.map((p) => (p.id === padId ? { ...p, soundFile } : p))
+    );
     // Load the new sound
     if (engineRef.current) {
       await engineRef.current.loadSample(padId, soundFile);
@@ -226,15 +263,19 @@ export default function PlaygroundPage() {
     };
   }, []);
 
-  // Check if a point is near the resize handle of a pad
-  const hitResizeHandle = useCallback((nx: number, ny: number, pad: PadConfig): boolean => {
-    // Match the position in canvas.ts drawResizeHandle (0.85 offset)
-    const handleX = pad.region.cx + pad.region.radius * 0.85;
-    const handleY = pad.region.cy + pad.region.radius * 0.85;
-    const dx = nx - handleX;
-    const dy = ny - handleY;
-    // Larger hit area (0.05) for easier grabbing
-    return Math.sqrt(dx * dx + dy * dy) < 0.05;
+  // Check if a point is in the bottom-right corner resize zone of a pad
+  const hitResizeCorner = useCallback((nx: number, ny: number, pad: PadConfig): boolean => {
+    // Bottom-right corner of the pad bounding box
+    const right = pad.region.cx + pad.region.radius;
+    const bottom = pad.region.cy + pad.region.radius;
+    // Resize zone - larger and easier to hit
+    const zoneSize = Math.max(0.05, pad.region.radius * 0.4);
+    const zoneCenterX = right - zoneSize * 0.4;
+    const zoneCenterY = bottom - zoneSize * 0.4;
+    const dx = nx - zoneCenterX;
+    const dy = ny - zoneCenterY;
+    // Circular hit zone
+    return Math.sqrt(dx * dx + dy * dy) <= zoneSize;
   }, []);
 
   // ── Drag & Resize handlers ──
@@ -244,25 +285,25 @@ export default function PlaygroundPage() {
     const { nx, ny } = getNormalized(clientX, clientY);
     wasResizeClickRef.current = false;
 
-    // Check resize handles first
-    for (const pad of currentPads) {
-      if (hitResizeHandle(nx, ny, pad)) {
-        const dist = Math.sqrt(
-          (nx - pad.region.cx) ** 2 + (ny - pad.region.cy) ** 2,
-        );
+    // Check resize corners first (iterate in reverse to prioritize top/last drawn pads)
+    for (let i = currentPads.length - 1; i >= 0; i--) {
+      const pad = currentPads[i];
+      if (hitResizeCorner(nx, ny, pad)) {
         resizeRef.current = {
           padId: pad.id,
           startRadius: pad.region.radius,
-          startDist: dist,
+          startX: nx,
+          startY: ny,
         };
         wasDraggingRef.current = false;
-        wasResizeClickRef.current = true; // Mark that we clicked on resize handle
+        wasResizeClickRef.current = true;
         return;
       }
     }
 
-    // Check pad bodies for drag
-    for (const pad of currentPads) {
+    // Check pad bodies for drag (iterate in reverse to prioritize top pads)
+    for (let i = currentPads.length - 1; i >= 0; i--) {
+      const pad = currentPads[i];
       if (pointInRegion(nx, ny, pad.region)) {
         dragRef.current = {
           padId: pad.id,
@@ -273,21 +314,23 @@ export default function PlaygroundPage() {
         return;
       }
     }
-  }, [stage, currentPads, getNormalized, hitResizeHandle]);
+  }, [stage, currentPads, getNormalized, hitResizeCorner]);
 
   const handleDragMove = useCallback((clientX: number, clientY: number) => {
     const { nx, ny } = getNormalized(clientX, clientY);
 
     if (resizeRef.current) {
       wasDraggingRef.current = true;
-      const { padId, startRadius, startDist } = resizeRef.current;
+      const { padId, startRadius, startX, startY } = resizeRef.current;
       const pad = currentPads.find((p) => p.id === padId);
       if (!pad) return;
-      const currentDist = Math.sqrt(
-        (nx - pad.region.cx) ** 2 + (ny - pad.region.cy) ** 2,
-      );
-      const scale = currentDist / startDist;
-      const newRadius = Math.max(MIN_PAD_RADIUS, Math.min(MAX_PAD_RADIUS, startRadius * scale));
+      
+      // Calculate new radius based on how far the mouse moved from start position
+      const deltaX = nx - startX;
+      const deltaY = ny - startY;
+      // Use the larger of the two deltas for uniform scaling
+      const delta = Math.max(deltaX, deltaY);
+      const newRadius = Math.max(MIN_PAD_RADIUS, Math.min(MAX_PAD_RADIUS, startRadius + delta));
       setPadRadii((prev) => new Map(prev).set(padId, newRadius));
       return;
     }
@@ -340,7 +383,7 @@ export default function PlaygroundPage() {
   const handleCanvasClick = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (stage !== 'playing') return;
-      // Skip if we were dragging or clicked on resize handle
+      // Skip if we were dragging or clicked on resize corner
       if (wasDraggingRef.current || wasResizeClickRef.current) {
         wasDraggingRef.current = false;
         wasResizeClickRef.current = false;
@@ -353,9 +396,9 @@ export default function PlaygroundPage() {
       const nx = (e.clientX - rect.left) / rect.width;
       const ny = (e.clientY - rect.top) / rect.height;
 
-      // Don't play if clicking on a resize handle
+      // Don't play if clicking on a resize corner
       for (const pad of currentPads) {
-        if (hitResizeHandle(nx, ny, pad)) {
+        if (hitResizeCorner(nx, ny, pad)) {
           return;
         }
       }
@@ -369,7 +412,7 @@ export default function PlaygroundPage() {
         }
       }
     },
-    [stage, currentPads, engineRef, resumeAudio, hitResizeHandle],
+    [stage, currentPads, engineRef, resumeAudio, hitResizeCorner],
   );
 
   // Process hits when playing
@@ -381,7 +424,7 @@ export default function PlaygroundPage() {
 
   // Canvas render loop
   useEffect(() => {
-    if (stage !== 'calibrating' && stage !== 'playing') return;
+    if (stage !== 'playing') return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -406,7 +449,7 @@ export default function PlaygroundPage() {
         const scale = beginnerMode ? 1.4 : 1;
         for (const pad of currentPads) {
           drawPad(ctx, pad, w, h, activePads.has(pad.id), scale);
-          drawResizeHandle(ctx, pad.region.cx, pad.region.cy, pad.region.radius, w, h);
+          drawResizeCorner(ctx, pad.region.cx, pad.region.cy, pad.region.radius, w, h);
         }
 
         // Draw ripples
@@ -422,12 +465,26 @@ export default function PlaygroundPage() {
         }
       }
 
-      // Draw fist circle indicators for closed fists
+      // Draw hand indicators
       if (frame) {
         for (const hand of frame.hands) {
           const gesture = recognizeGesture(hand);
-          if (gesture === 'fist') {
-            const center = getFistCenter(hand.landmarks);
+          
+          if (selectedInstrument === 'tiles') {
+            // For piano tiles: draw hand skeleton and fingertip indicator
+            drawHandSkeleton(ctx, hand.landmarks, w, h);
+            // Draw a small circle at the index fingertip
+            const fingertip = getIndexFingertip(hand.landmarks);
+            ctx.beginPath();
+            ctx.arc(fingertip.x * w, fingertip.y * h, 8, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 100, 100, 0.9)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          } else if (gesture === 'fist') {
+            // For drums/tabla: show fist indicator only when fist detected
+            const center = getHandCenter(hand.landmarks);
             const radius = getFistRadius(hand.landmarks);
             drawFistIndicator(ctx, center.x, center.y, radius, w, h);
           }
@@ -439,7 +496,7 @@ export default function PlaygroundPage() {
 
     rafRef.current = requestAnimationFrame(render);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [stage, frame, currentPads, activePads, ripples, setRipples, beginnerMode]);
+  }, [stage, frame, currentPads, activePads, ripples, setRipples, beginnerMode, selectedInstrument]);
 
   // Show home screen when idle and no instrument selected
   if (stage === 'idle' && !selectedInstrument) {
@@ -469,10 +526,6 @@ export default function PlaygroundPage() {
             </p>
           </div>
         </div>
-      )}
-
-      {stage === 'calibrating' && (
-        <CalibrationOverlay frame={frame} onReady={handleCalibrationReady} />
       )}
 
       {stage === 'playing' && (
@@ -534,6 +587,13 @@ export default function PlaygroundPage() {
                       </div>
                       <span className="text-xs text-gray-300">Tabla</span>
                     </button>
+                    <button
+                      onClick={() => handleAddPad('tile')}
+                      className="flex flex-col items-center gap-1 p-3 rounded-xl bg-gray-800 hover:bg-gray-700 transition-colors col-span-2"
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-green-400 to-emerald-600 border-2 border-green-300" />
+                      <span className="text-xs text-gray-300">Tile</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -575,6 +635,8 @@ export default function PlaygroundPage() {
             onTablaSoundChange={selectedInstrument === 'tabla' ? handleTablaSoundChange : undefined}
             onDeletePad={selectedInstrument === 'custom' ? handleDeletePad : undefined}
             onPadColorChange={selectedInstrument === 'custom' ? handlePadColorChange : undefined}
+            onPadLabelChange={selectedInstrument === 'custom' ? handlePadLabelChange : undefined}
+            onPresetSoundChange={selectedInstrument === 'custom' ? handlePresetSoundChange : undefined}
           />
         </>
       )}

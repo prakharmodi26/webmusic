@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand-Controlled Musical Instrument</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="container">
+        <button id="startButton">Start</button>
+
+        <div id="videoContainer" style="display: none;">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+
+            <div id="modeToggle" style="position: absolute; top: 10px; left: 10px; z-index: 10; display: none;">
+                <label style="color: white; background: rgba(0,0,0,0.7); padding: 8px; border-radius: 4px; cursor: pointer;">
+                    <input type="checkbox" id="motionModeCheckbox"> Motion Detection Mode
+                </label>
+            </div>
+        </div>
+
+        <div id="error" style="display: none;"></div>
+    </div>
+
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <!-- Tone.js -->
+    <script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
+
+    <!-- Our script -->
+    <script src="script.js"></script>
+</body>
+</html>
