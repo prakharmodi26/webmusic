@@ -16,7 +16,14 @@ export function useCamera() {
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        try {
+          await videoRef.current.play();
+        } catch (err) {
+          // Swallow autoplay interruptions and try again on the next frame
+          requestAnimationFrame(() => {
+            videoRef.current?.play().catch(() => {});
+          });
+        }
         setIsActive(true);
       }
     } catch (err) {

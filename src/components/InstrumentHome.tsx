@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export type InstrumentType = 'drums' | 'tabla' | 'custom' | 'tiles';
+export type InstrumentType = 'drums' | 'tabla' | 'custom' | 'tiles' | 'pinch-piano';
 
 interface InstrumentHomeProps {
   onSelectInstrument: (instrument: InstrumentType) => void;
@@ -71,6 +71,28 @@ const instruments: InstrumentCard[] = [
         <rect x="18" y="32" width="12" height="20" rx="2" fill="#AA96DA" />
         <rect x="32" y="32" width="12" height="20" rx="2" fill="#FCBAD3" />
         <rect x="46" y="32" width="12" height="20" rx="2" fill="#A8D8EA" />
+      </svg>
+    ),
+  },
+  {
+    id: 'pinch-piano',
+    name: 'Pinch Piano',
+    description: 'Rhythm game with pinch gestures',
+    gradient: 'from-indigo-500 to-purple-600',
+    icon: (
+      <svg viewBox="0 0 64 64" className="w-20 h-20" fill="currentColor">
+        {/* Falling tiles */}
+        <rect x="4" y="4" width="12" height="10" rx="2" fill="#FF6B6B" />
+        <rect x="18" y="14" width="12" height="10" rx="2" fill="#4ECDC4" />
+        <rect x="32" y="8" width="12" height="10" rx="2" fill="#FFE66D" />
+        <rect x="46" y="18" width="12" height="10" rx="2" fill="#AA96DA" />
+        {/* Hit zone line */}
+        <rect x="2" y="44" width="60" height="2" rx="1" fill="rgba(255,255,255,0.5)" />
+        {/* Pinch indicators */}
+        <circle cx="10" cy="54" r="5" fill="#FF6B6B" stroke="white" strokeWidth="1.5" />
+        <circle cx="24" cy="54" r="5" fill="#4ECDC4" stroke="white" strokeWidth="1.5" />
+        <circle cx="38" cy="54" r="5" fill="#FFE66D" stroke="white" strokeWidth="1.5" />
+        <circle cx="52" cy="54" r="5" fill="#AA96DA" stroke="white" strokeWidth="1.5" />
       </svg>
     ),
   },
@@ -266,24 +288,36 @@ export default function InstrumentHome({ onSelectInstrument, error }: Instrument
             <div className="flex flex-col items-center gap-2">
               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4A6B7C] to-[#3D5A6A] border-2 border-[#5D7D8A] flex items-center justify-center overflow-hidden p-2">
                 <img src="/svg/finger.svg" alt="Index finger gesture" className="w-14 h-14 object-contain" />
-                {/* Old Detailed Index Finger SVG (commented out):
-                <svg viewBox="0 0 64 64" className="w-12 h-12">
-                  <path d="M26 8 C26 8 26 6 32 6 C38 6 38 8 38 8 L38 42 C38 46 36 48 32 48 C28 48 26 46 26 42 Z" fill="#F0C5A8"/>
-                  <path d="M28 10 L28 40 C28 43 29 45 32 45" stroke="#F5D0B8" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.7"/>
-                  <rect x="28" y="8" width="8" height="6" rx="3" fill="#F5D6C6" />
-                  <rect x="29" y="9" width="6" height="3" rx="2" fill="#FFE4D6" opacity="0.7"/>
-                  <path d="M27 20 L37 20" stroke="#DDA68A" strokeWidth="1.5" strokeLinecap="round" opacity="0.6"/>
-                  <path d="M27 32 L37 32" stroke="#DDA68A" strokeWidth="1.5" strokeLinecap="round" opacity="0.6"/>
-                  <path d="M22 44 C22 44 20 46 20 52 C20 58 26 60 32 60 C38 60 44 58 44 52 C44 46 42 44 42 44 L38 44 C38 48 36 50 32 50 C28 50 26 48 26 44 Z" fill="#F0C5A8"/>
-                  <ellipse cx="24" cy="52" rx="5" ry="6" fill="#E8B69A" />
-                  <ellipse cx="32" cy="54" rx="5" ry="5" fill="#E8B69A" />
-                  <ellipse cx="40" cy="52" rx="5" ry="6" fill="#E8B69A" />
-                  <ellipse cx="18" cy="50" rx="4" ry="6" fill="#E8B69A" />
-                </svg>
-                */}
               </div>
               <p className="text-white font-semibold">Index Finger</p>
               <p className="text-blue-300/70 text-sm">for Piano Tiles</p>
+            </div>
+
+            {/* Two Hands for Pinch Piano */}
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4A6B7C] to-[#3D5A6A] border-2 border-[#5D7D8A] flex items-center justify-center overflow-hidden p-2">
+                <svg viewBox="0 0 64 64" className="w-14 h-14">
+                  {/* Left hand - simplified */}
+                  <ellipse cx="16" cy="32" rx="10" ry="14" fill="#F0C5A8" />
+                  {/* Left index finger */}
+                  <ellipse cx="20" cy="18" rx="3" ry="8" fill="#E8B69A" />
+                  {/* Left middle finger */}
+                  <ellipse cx="12" cy="16" rx="3" ry="9" fill="#E8B69A" />
+                  {/* Right hand - simplified */}
+                  <ellipse cx="48" cy="32" rx="10" ry="14" fill="#F0C5A8" />
+                  {/* Right index finger */}
+                  <ellipse cx="44" cy="18" rx="3" ry="8" fill="#E8B69A" />
+                  {/* Right middle finger */}
+                  <ellipse cx="52" cy="16" rx="3" ry="9" fill="#E8B69A" />
+                  {/* Finger tip indicators */}
+                  <circle cx="12" cy="8" r="3" fill="#FF6B6B" />
+                  <circle cx="20" cy="10" r="3" fill="#4ECDC4" />
+                  <circle cx="44" cy="10" r="3" fill="#FFE66D" />
+                  <circle cx="52" cy="8" r="3" fill="#AA96DA" />
+                </svg>
+              </div>
+              <p className="text-white font-semibold">Both Hands</p>
+              <p className="text-blue-300/70 text-sm">for Pinch Piano</p>
             </div>
           </div>
         </div>
