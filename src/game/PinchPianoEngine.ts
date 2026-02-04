@@ -17,9 +17,6 @@ export class PinchPianoEngine {
   private onPlaySound: (column: Column) => void;
   private onMiss: () => void;
   private lastUpdateTime: number = 0;
-  private prevPinchState: PinchState | null = null;
-  // Tracks whether the current pinch (until release) has already triggered a hit per column
-  private pinchHitConsumed: boolean[] = [false, false, false, false];
   private difficultyMode: DifficultyMode = 'medium';
   private consecutiveHits: number = 0;
   private persistentHighScore: number = 0;  // Persists across restarts
@@ -74,8 +71,6 @@ export class PinchPianoEngine {
     this.lastUpdateTime = 0;
     this.missAnimations = [];
     this.hitAnimations = [];
-    this.prevPinchState = null;
-    this.pinchHitConsumed = [false, false, false, false];
     this.consecutiveHits = 0;
     tileIdCounter = 0;
   }
@@ -98,8 +93,6 @@ export class PinchPianoEngine {
     this.missAnimations = [];
     this.hitAnimations = [];
     this.lastUpdateTime = 0;
-    this.prevPinchState = null;
-    this.pinchHitConsumed = [false, false, false, false];
     this.consecutiveHits = 0;
     tileIdCounter = 0;
   }
@@ -148,9 +141,8 @@ export class PinchPianoEngine {
       }
     }
 
-    // Check for hits (only on new pinch)
+    // Check for hits while finger is down
     this.checkHits(pinchState, timestamp);
-    this.prevPinchState = { ...pinchState };
 
     // Check for misses
     this.checkMisses(timestamp);
@@ -170,36 +162,56 @@ export class PinchPianoEngine {
     }
   }
 
-  private isColumnAvailable(column: Column): boolean {
-    const { yMin } = this.config.hitZone;
+  // Minimum Y gap between tiles to ensure they don't overlap in hit zone
+  private readonly MIN_TILE_GAP = 0.18;  // Roughly one tile height apart
+
+  private isColumnAvailable(column: Column, targetY: number): boolean {
+    // Check if any tile in this column would be too close to the target Y position
     const blockingTile = this.state.tiles.find(
-      (t) => t.column === column && !t.hit && !t.missed && t.y < yMin + 0.1
+      (t) => t.column === column && !t.hit && !t.missed && Math.abs(t.y - targetY) < this.MIN_TILE_GAP
     );
     return !blockingTile;
   }
 
-  private getAvailableColumns(): Column[] {
+  private getAvailableColumnsAtY(targetY: number): Column[] {
     const columns: Column[] = [0, 1, 2, 3];
-    return columns.filter((col) => this.isColumnAvailable(col));
+    return columns.filter((col) => this.isColumnAvailable(col, targetY));
   }
 
   private spawnTile(): void {
-    const availableColumns = this.getAvailableColumns();
-    if (availableColumns.length === 0) return;
+    // Determine how many tiles to spawn (increases with difficulty)
+    // At higher speeds, chance to spawn multiple tiles increases
+    const speedRatio = this.state.speed / this.config.initialSpeed;
+    const multiTileChance = Math.min(0.6, (speedRatio - 1) * 0.15);  // Up to 60% chance at high speeds
+    
+    // Base: always spawn at least 1, maybe 2 at higher difficulty
+    let tilesToSpawn = 1;
+    if (Math.random() < multiTileChance) {
+      tilesToSpawn = 2;
+    }
+    
+    // Spawn tiles at staggered Y positions to ensure gap
+    for (let i = 0; i < tilesToSpawn; i++) {
+      // Each additional tile spawns slightly higher (earlier) to maintain gap
+      const targetY = -0.12 - (i * this.MIN_TILE_GAP * 1.2);  // Stagger Y positions
+      
+      const availableColumns = this.getAvailableColumnsAtY(targetY);
+      if (availableColumns.length === 0) continue;
 
-    const column = availableColumns[Math.floor(Math.random() * availableColumns.length)];
-    const note = this.config.columnNotes[column];
+      const column = availableColumns[Math.floor(Math.random() * availableColumns.length)];
+      const note = this.config.columnNotes[column];
 
-    const tile: FallingTile = {
-      id: generateTileId(),
-      column,
-      y: -0.12,
-      note,
-      hit: false,
-      missed: false,
-    };
+      const tile: FallingTile = {
+        id: generateTileId(),
+        column,
+        y: targetY,
+        note,
+        hit: false,
+        missed: false,
+      };
 
-    this.state.tiles.push(tile);
+      this.state.tiles.push(tile);
+    }
   }
 
   private checkHits(pinchState: PinchState, timestamp: number): void {
@@ -208,19 +220,13 @@ export class PinchPianoEngine {
 
     cols.forEach((colKey, colIndex) => {
       const column = colIndex as Column;
-      const wasActive = this.prevPinchState?.[colKey] ?? false;
       const isActive = pinchState[colKey];
 
-      // Reset consumption when pinch is released so the next pinch can score again
-      if (!isActive && wasActive) {
-        this.pinchHitConsumed[column] = false;
-        return;
-      }
+      // If column is not activated, skip
+      if (!isActive) return;
 
-      // Only consider hits while the pinch is held and not yet consumed
-      if (!isActive || this.pinchHitConsumed[column]) return;
-
-      const hitableTile = this.state.tiles.find(
+      // Find ALL tiles in the hit zone for this activated column
+      const hitableTiles = this.state.tiles.filter(
         (t) =>
           t.column === column &&
           !t.hit &&
@@ -229,10 +235,10 @@ export class PinchPianoEngine {
           t.y <= yMax
       );
 
-      if (hitableTile) {
-        hitableTile.hit = true;
-        hitableTile.hitAt = timestamp;
-        this.pinchHitConsumed[column] = true;
+      // Hit ALL tiles in the zone while finger is down
+      for (const tile of hitableTiles) {
+        tile.hit = true;
+        tile.hitAt = timestamp;
 
         // Simple scoring: 10 points per hit
         this.state.score += 10;
@@ -246,9 +252,9 @@ export class PinchPianoEngine {
         this.onPlaySound(column);
 
         this.hitAnimations.push({
-          tileId: hitableTile.id,
+          tileId: tile.id,
           column,
-          y: hitableTile.y,
+          y: tile.y,
           startTime: timestamp,
           color: this.config.columnColors[column],
         });
@@ -347,6 +353,12 @@ export class PinchPianoEngine {
       this.state.speed = Math.min(
         this.state.speed + increment,
         this.config.maxSpeed
+      );
+      // Also increase spawn rate (decrease time between spawns)
+      const spawnDecrement = increment * 0.5; // Spawn rate increases proportionally
+      this.state.spawnRate = Math.max(
+        this.state.spawnRate - spawnDecrement,
+        this.config.minSpawnRate
       );
       this.consecutiveHits = 0;
     }

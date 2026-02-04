@@ -15,8 +15,30 @@ interface InstrumentCard {
   gradient: string;
 }
 
-// Order: drums, tabla, tiles, custom (custom at end)
+// Order: piano-tiles first, then drums, tabla, piano, custom (custom at end)
 const instruments: InstrumentCard[] = [
+  {
+    id: 'pinch-piano',
+    name: 'Piano Tiles',
+    description: 'Rhythm game with finger gestures',
+    gradient: 'from-indigo-500 to-purple-600',
+    icon: (
+      <svg viewBox="0 0 64 64" className="w-20 h-20" fill="currentColor">
+        {/* Falling tiles */}
+        <rect x="4" y="4" width="12" height="10" rx="2" fill="#FF6B6B" />
+        <rect x="18" y="14" width="12" height="10" rx="2" fill="#4ECDC4" />
+        <rect x="32" y="8" width="12" height="10" rx="2" fill="#FFE66D" />
+        <rect x="46" y="18" width="12" height="10" rx="2" fill="#AA96DA" />
+        {/* Hit zone line */}
+        <rect x="2" y="44" width="60" height="2" rx="1" fill="rgba(255,255,255,0.5)" />
+        {/* Pinch indicators */}
+        <circle cx="10" cy="54" r="5" fill="#FF6B6B" stroke="white" strokeWidth="1.5" />
+        <circle cx="24" cy="54" r="5" fill="#4ECDC4" stroke="white" strokeWidth="1.5" />
+        <circle cx="38" cy="54" r="5" fill="#FFE66D" stroke="white" strokeWidth="1.5" />
+        <circle cx="52" cy="54" r="5" fill="#AA96DA" stroke="white" strokeWidth="1.5" />
+      </svg>
+    ),
+  },
   {
     id: 'drums',
     name: 'Drums',
@@ -58,8 +80,8 @@ const instruments: InstrumentCard[] = [
   },
   {
     id: 'tiles',
-    name: 'Piano Tiles',
-    description: 'Colorful piano grid',
+    name: 'Piano',
+    description: 'Colorful piano tile grid',
     gradient: 'from-green-400 to-emerald-600',
     icon: (
       <svg viewBox="0 0 64 64" className="w-20 h-20" fill="currentColor">
@@ -71,28 +93,6 @@ const instruments: InstrumentCard[] = [
         <rect x="18" y="32" width="12" height="20" rx="2" fill="#AA96DA" />
         <rect x="32" y="32" width="12" height="20" rx="2" fill="#FCBAD3" />
         <rect x="46" y="32" width="12" height="20" rx="2" fill="#A8D8EA" />
-      </svg>
-    ),
-  },
-  {
-    id: 'pinch-piano',
-    name: 'Pinch Piano',
-    description: 'Rhythm game with pinch gestures',
-    gradient: 'from-indigo-500 to-purple-600',
-    icon: (
-      <svg viewBox="0 0 64 64" className="w-20 h-20" fill="currentColor">
-        {/* Falling tiles */}
-        <rect x="4" y="4" width="12" height="10" rx="2" fill="#FF6B6B" />
-        <rect x="18" y="14" width="12" height="10" rx="2" fill="#4ECDC4" />
-        <rect x="32" y="8" width="12" height="10" rx="2" fill="#FFE66D" />
-        <rect x="46" y="18" width="12" height="10" rx="2" fill="#AA96DA" />
-        {/* Hit zone line */}
-        <rect x="2" y="44" width="60" height="2" rx="1" fill="rgba(255,255,255,0.5)" />
-        {/* Pinch indicators */}
-        <circle cx="10" cy="54" r="5" fill="#FF6B6B" stroke="white" strokeWidth="1.5" />
-        <circle cx="24" cy="54" r="5" fill="#4ECDC4" stroke="white" strokeWidth="1.5" />
-        <circle cx="38" cy="54" r="5" fill="#FFE66D" stroke="white" strokeWidth="1.5" />
-        <circle cx="52" cy="54" r="5" fill="#AA96DA" stroke="white" strokeWidth="1.5" />
       </svg>
     ),
   },

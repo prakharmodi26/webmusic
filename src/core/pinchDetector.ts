@@ -1,5 +1,9 @@
 import type { HandFrame, Point3D } from '../types/hand';
 
+// ============================================================
+// PUBLIC INTERFACES (maintained for compatibility)
+// ============================================================
+
 export interface PinchState {
   col0: boolean;  // Right hand: middle finger down
   col1: boolean;  // Right hand: index finger down
@@ -13,7 +17,7 @@ export interface FingerDebugInfo {
   tipY: number;
   pipY: number;
   mcpY: number;
-  bendAmount: number;        // How much finger is bent (normalized)
+  bendAmount: number;
   baseConfidence: number;
   totalConfidence: number;
   requiredConfidence: number;
@@ -40,98 +44,314 @@ export interface PinchDebugInfo {
   };
 }
 
-// Landmark indices for fingers
-// Index finger: MCP=5, PIP=6, DIP=7, TIP=8
-// Middle finger: MCP=9, PIP=10, DIP=11, TIP=12
-const INDEX_MCP = 5;
-const INDEX_PIP = 6;
-const INDEX_TIP = 8;
-const MIDDLE_MCP = 9;
-const MIDDLE_PIP = 10;
-const MIDDLE_TIP = 12;
+// ============================================================
+// TUNABLE CONFIGURATION PARAMETERS
+// ============================================================
 
-// For palm size normalization
-const WRIST = 0;
+export interface FingerDetectorConfig {
+  // Primary threshold: How far tip must be below PIP to consider finger "down"
+  fingerDownThreshold: number;
 
-// Thresholds for finger-down detection - optimized for fast response
-// bendAmount > BEND_THRESHOLD means finger is considered "down"
-const BEND_THRESHOLD = 0.15;          // Lower = triggers faster on slight bend
-const RELEASE_THRESHOLD = 0.08;       // Lower = releases faster when extended
-const CONFIDENCE_THRESHOLD = 0.40;    // Lower = more responsive detection
+  // Confidence boost when the OTHER finger is confirmed UP
+  partnerUpBoost: number;
 
-function distance3D(a: Point3D, b: Point3D): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  const dz = (a.z || 0) - (b.z || 0);
-  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  // Minimum curl ratio (tip-to-mcp vs pip-to-mcp) to consider finger curled
+  curlRatioThreshold: number;
+
+  // Debounce: frames finger must be down before registering
+  debounceFrames: number;
+
+  // Z-depth threshold for forward detection
+  zDepthThreshold: number;
+
+  // Use angle-based detection (more robust to hand orientation)
+  useAngleDetection: boolean;
+
+  // Angle threshold in degrees - finger considered down when angle < this
+  angleThreshold: number;
+
+  // Smoothing factor for landmark positions (0 = no smoothing, 1 = full previous)
+  smoothingFactor: number;
+
+  // Hysteresis: different thresholds for going down vs coming up
+  hysteresisMargin: number;
 }
 
-function getPalmSize(landmarks: Point3D[]): number {
-  const wrist = landmarks[WRIST];
-  const middleMcp = landmarks[MIDDLE_MCP];
-  return distance3D(wrist, middleMcp);
+const DEFAULT_CONFIG: FingerDetectorConfig = {
+  fingerDownThreshold: 0.04,
+  partnerUpBoost: 0.15,
+  curlRatioThreshold: 0.55,
+  debounceFrames: 2,
+  zDepthThreshold: -0.02,
+  useAngleDetection: true,
+  angleThreshold: 140,
+  smoothingFactor: 0.4,
+  hysteresisMargin: 0.015,
+};
+
+// ============================================================
+// INTERNAL TYPES
+// ============================================================
+
+type DetectedFinger = 'index' | 'middle' | 'both' | 'none';
+
+interface FingerState {
+  isDown: boolean;
+  confidence: number;
+  rawValue: number;
+  timestamp: number;
 }
 
-/**
- * Calculate how much a finger is bent/curled.
- * Returns a value where:
- * - 0 = finger fully extended (V-sign)
- * - 1 = finger fully curled down
- * 
- * We measure by comparing tip position to PIP (middle joint).
- * When tip Y > PIP Y (in screen coords where Y increases downward), finger is curled.
- */
-function calculateFingerBend(
-  tip: Point3D,
-  pip: Point3D,
-  _mcp: Point3D,  // Reserved for future use
-  palmSize: number
-): number {
-  // Calculate the "down" amount: how much tip is below PIP
-  // Positive = finger curled down, Negative = finger extended up
-  const tipBelowPip = tip.y - pip.y;
+// ============================================================
+// VICTORY FINGER DETECTOR CLASS
+// ============================================================
+
+class VictoryFingerDetector {
+  private config: FingerDetectorConfig;
   
-  // Normalize by palm size for consistency across different hand sizes/distances
-  const normalizedBend = tipBelowPip / palmSize;
+  // State tracking per finger
+  private indexDownFrames = 0;
+  private middleDownFrames = 0;
+  private firstDownFinger: DetectedFinger | null = null;
   
-  // Clamp to reasonable range
-  return Math.max(0, Math.min(1, normalizedBend + 0.1)); // +0.1 offset so slight bend registers
-}
+  // Previous states for hysteresis
+  private prevIndexDown = false;
+  private prevMiddleDown = false;
+  
+  // Smoothed landmarks
+  private smoothedLandmarks: Point3D[] | null = null;
 
-/**
- * Calculate confidence score based on how definitively the finger is down.
- * Higher bend = higher confidence. Optimized for fast response.
- */
-function calculateFingerDownConfidence(bendAmount: number): number {
-  if (bendAmount < RELEASE_THRESHOLD) {
-    return 0;
+  constructor(config: Partial<FingerDetectorConfig> = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config };
   }
-  
-  // Direct linear mapping for fastest response
-  // bendAmount of 0.15 (BEND_THRESHOLD) gives confidence of 1.0
-  const confidence = bendAmount / BEND_THRESHOLD;
-  
-  return Math.min(1, confidence);
+
+  /**
+   * Reset all state (call when hand is lost/redetected)
+   */
+  reset(): void {
+    this.indexDownFrames = 0;
+    this.middleDownFrames = 0;
+    this.firstDownFinger = null;
+    this.prevIndexDown = false;
+    this.prevMiddleDown = false;
+    this.smoothedLandmarks = null;
+  }
+
+  /**
+   * Main detection method - call this each frame with landmarks
+   */
+  detect(landmarks: Point3D[]): { indexDown: boolean; middleDown: boolean; indexConf: number; middleConf: number } {
+    const now = Date.now();
+    
+    // Apply smoothing
+    const smoothed = this.smoothLandmarks(landmarks);
+    
+    // Get finger states using multiple methods for robustness
+    const indexState = this.getFingerState(smoothed, 'index', now);
+    const middleState = this.getFingerState(smoothed, 'middle', now);
+    
+    // Apply partner boost - if one is UP, increases confidence the other is DOWN
+    if (!indexState.isDown && middleState.confidence > 0.3) {
+      middleState.confidence = Math.min(1.0, middleState.confidence + this.config.partnerUpBoost);
+    }
+    if (!middleState.isDown && indexState.confidence > 0.3) {
+      indexState.confidence = Math.min(1.0, indexState.confidence + this.config.partnerUpBoost);
+    }
+    
+    // Apply hysteresis to prevent flickering
+    const indexDown = this.applyHysteresis(indexState, this.prevIndexDown);
+    const middleDown = this.applyHysteresis(middleState, this.prevMiddleDown);
+    
+    // Update debounce counters
+    this.indexDownFrames = indexDown ? this.indexDownFrames + 1 : 0;
+    this.middleDownFrames = middleDown ? this.middleDownFrames + 1 : 0;
+    
+    // Check if fingers pass debounce threshold
+    const indexConfirmedDown = this.indexDownFrames >= this.config.debounceFrames;
+    const middleConfirmedDown = this.middleDownFrames >= this.config.debounceFrames;
+    
+    // Track which finger went down first
+    this.updateFirstDownFinger(indexConfirmedDown, middleConfirmedDown);
+    
+    // Update previous states
+    this.prevIndexDown = indexDown;
+    this.prevMiddleDown = middleDown;
+    
+    return {
+      indexDown: indexConfirmedDown,
+      middleDown: middleConfirmedDown,
+      indexConf: indexState.confidence,
+      middleConf: middleState.confidence,
+    };
+  }
+
+  /**
+   * Smooth landmarks to reduce jitter
+   */
+  private smoothLandmarks(landmarks: Point3D[]): Point3D[] {
+    if (!this.smoothedLandmarks || this.config.smoothingFactor === 0) {
+      this.smoothedLandmarks = landmarks.map(l => ({ ...l }));
+      return this.smoothedLandmarks;
+    }
+    
+    const alpha = this.config.smoothingFactor;
+    this.smoothedLandmarks = landmarks.map((l, i) => ({
+      x: alpha * this.smoothedLandmarks![i].x + (1 - alpha) * l.x,
+      y: alpha * this.smoothedLandmarks![i].y + (1 - alpha) * l.y,
+      z: alpha * (this.smoothedLandmarks![i].z || 0) + (1 - alpha) * (l.z || 0),
+    }));
+    
+    return this.smoothedLandmarks;
+  }
+
+  /**
+   * Get the state of a specific finger using multiple detection methods
+   */
+  private getFingerState(
+    landmarks: Point3D[], 
+    finger: 'index' | 'middle',
+    timestamp: number
+  ): FingerState {
+    const indices = finger === 'index' 
+      ? { mcp: 5, pip: 6, dip: 7, tip: 8 }
+      : { mcp: 9, pip: 10, dip: 11, tip: 12 };
+    
+    const mcp = landmarks[indices.mcp];
+    const pip = landmarks[indices.pip];
+    const tip = landmarks[indices.tip];
+    
+    // Method 1: Y-position based (tip below PIP)
+    const yDiff = tip.y - pip.y;
+    const yBasedDown = yDiff > this.config.fingerDownThreshold;
+    
+    // Method 2: Curl ratio (how much finger is curled)
+    const tipToMcp = this.distance(tip, mcp);
+    const pipToMcp = this.distance(pip, mcp);
+    const curlRatio = tipToMcp / (pipToMcp + 0.0001);
+    const curlBasedDown = curlRatio < this.config.curlRatioThreshold;
+    
+    // Method 3: Angle-based detection (more robust to rotation)
+    let angleBasedDown = false;
+    if (this.config.useAngleDetection) {
+      const angle = this.calculateFingerAngle(mcp, pip, tip);
+      angleBasedDown = angle < this.config.angleThreshold;
+    }
+    
+    // Method 4: Z-depth check (finger moving toward camera when curled)
+    const zDiff = (tip.z || 0) - (pip.z || 0);
+    const zBasedDown = zDiff < this.config.zDepthThreshold;
+    
+    // Combine methods with weighted voting
+    let downScore = 0;
+    let totalWeight = 0;
+    
+    // Y-position: weight 0.35
+    if (yBasedDown) downScore += 0.35;
+    totalWeight += 0.35;
+    
+    // Curl ratio: weight 0.25
+    if (curlBasedDown) downScore += 0.25;
+    totalWeight += 0.25;
+    
+    // Angle: weight 0.30 (if enabled)
+    if (this.config.useAngleDetection) {
+      if (angleBasedDown) downScore += 0.30;
+      totalWeight += 0.30;
+    }
+    
+    // Z-depth: weight 0.10 (supplementary)
+    if (zBasedDown) downScore += 0.10;
+    totalWeight += 0.10;
+    
+    const confidence = downScore / totalWeight;
+    const isDown = confidence > 0.5;
+    
+    return {
+      isDown,
+      confidence,
+      rawValue: yDiff,
+      timestamp,
+    };
+  }
+
+  /**
+   * Calculate the angle at the PIP joint (finger bend angle)
+   */
+  private calculateFingerAngle(mcp: Point3D, pip: Point3D, tip: Point3D): number {
+    const v1 = { x: mcp.x - pip.x, y: mcp.y - pip.y };
+    const v2 = { x: tip.x - pip.x, y: tip.y - pip.y };
+    
+    const dot = v1.x * v2.x + v1.y * v2.y;
+    const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+    const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+    
+    if (mag1 === 0 || mag2 === 0) return 180;
+    
+    const cosAngle = Math.max(-1, Math.min(1, dot / (mag1 * mag2)));
+    return Math.acos(cosAngle) * (180 / Math.PI);
+  }
+
+  /**
+   * Calculate Euclidean distance between two landmarks
+   */
+  private distance(a: Point3D, b: Point3D): number {
+    return Math.sqrt(
+      Math.pow(a.x - b.x, 2) + 
+      Math.pow(a.y - b.y, 2) + 
+      Math.pow((a.z || 0) - (b.z || 0), 2)
+    );
+  }
+
+  /**
+   * Apply hysteresis to prevent flickering at threshold boundary
+   */
+  private applyHysteresis(state: FingerState, wasDown: boolean): boolean {
+    const threshold = wasDown 
+      ? 0.5 - this.config.hysteresisMargin
+      : 0.5 + this.config.hysteresisMargin;
+    
+    return state.confidence > threshold;
+  }
+
+  /**
+   * Track which finger went down first
+   */
+  private updateFirstDownFinger(indexDown: boolean, middleDown: boolean): void {
+    if (!indexDown && !middleDown) {
+      this.firstDownFinger = null;
+      return;
+    }
+    
+    if (this.firstDownFinger !== null) {
+      return;
+    }
+    
+    if (indexDown && !middleDown) {
+      this.firstDownFinger = 'index';
+    } else if (middleDown && !indexDown) {
+      this.firstDownFinger = 'middle';
+    } else if (indexDown && middleDown) {
+      if (this.indexDownFrames > this.middleDownFrames) {
+        this.firstDownFinger = 'index';
+      } else if (this.middleDownFrames > this.indexDownFrames) {
+        this.firstDownFinger = 'middle';
+      } else {
+        this.firstDownFinger = 'both';
+      }
+    }
+  }
 }
 
-/**
- * Check if a finger is "down" (curled/bent) with hysteresis.
- */
-function checkFingerDown(
-  tip: Point3D,
-  pip: Point3D,
-  mcp: Point3D,
-  palmSize: number,
-  _wasDown: boolean
-): { isDown: boolean; bendAmount: number; confidence: number } {
-  const bendAmount = calculateFingerBend(tip, pip, mcp, palmSize);
-  const confidence = calculateFingerDownConfidence(bendAmount);
-  
-  // Direct threshold check - no hysteresis for instant response
-  const isDown = confidence >= CONFIDENCE_THRESHOLD;
-  
-  return { isDown, bendAmount, confidence };
-}
+// ============================================================
+// GLOBAL DETECTOR INSTANCES (one per hand)
+// ============================================================
+
+const leftHandDetector = new VictoryFingerDetector();
+const rightHandDetector = new VictoryFingerDetector();
+
+let lastLeftHandSeen = 0;
+let lastRightHandSeen = 0;
+const HAND_TIMEOUT_MS = 500;
 
 /**
  * Detect finger-down gestures from both hands (V-sign style).
@@ -143,7 +363,8 @@ function checkFingerDown(
  * - Left hand index down → Column 2
  * - Left hand middle down → Column 3
  */
-export function detectPinches(hands: HandFrame[], prevState?: PinchState): PinchState {
+export function detectPinches(hands: HandFrame[], _prevState?: PinchState): PinchState {
+  const now = Date.now();
   const rawState: PinchState = {
     col0: false,
     col1: false,
@@ -151,53 +372,45 @@ export function detectPinches(hands: HandFrame[], prevState?: PinchState): Pinch
     col3: false,
   };
 
+  let leftHandFound = false;
+  let rightHandFound = false;
+
   for (const hand of hands) {
     const landmarks = hand.landmarks;
-    const palmSize = getPalmSize(landmarks);
-
-    // Prevent division by zero
-    if (palmSize < 0.01) continue;
-
-    // Get finger landmarks
-    const indexTip = landmarks[INDEX_TIP];
-    const indexPip = landmarks[INDEX_PIP];
-    const indexMcp = landmarks[INDEX_MCP];
-    
-    const middleTip = landmarks[MIDDLE_TIP];
-    const middlePip = landmarks[MIDDLE_PIP];
-    const middleMcp = landmarks[MIDDLE_MCP];
+    if (!landmarks || landmarks.length < 21) continue;
 
     if (hand.handedness === 'Left') {
-      // Left hand: index down = col2, middle down = col3
-      const indexResult = checkFingerDown(
-        indexTip, indexPip, indexMcp, palmSize,
-        prevState?.col2 ?? false
-      );
-      const middleResult = checkFingerDown(
-        middleTip, middlePip, middleMcp, palmSize,
-        prevState?.col3 ?? false
-      );
+      leftHandFound = true;
       
-      rawState.col2 = indexResult.isDown;
-      rawState.col3 = middleResult.isDown;
+      if (now - lastLeftHandSeen > HAND_TIMEOUT_MS) {
+        leftHandDetector.reset();
+      }
+      lastLeftHandSeen = now;
+      
+      const result = leftHandDetector.detect(landmarks);
+      rawState.col2 = result.indexDown;
+      rawState.col3 = result.middleDown;
     } else {
-      // Right hand: index down = col1, middle down = col0
-      const indexResult = checkFingerDown(
-        indexTip, indexPip, indexMcp, palmSize,
-        prevState?.col1 ?? false
-      );
-      const middleResult = checkFingerDown(
-        middleTip, middlePip, middleMcp, palmSize,
-        prevState?.col0 ?? false
-      );
+      rightHandFound = true;
       
-      rawState.col1 = indexResult.isDown;
-      rawState.col0 = middleResult.isDown;
+      if (now - lastRightHandSeen > HAND_TIMEOUT_MS) {
+        rightHandDetector.reset();
+      }
+      lastRightHandSeen = now;
+      
+      const result = rightHandDetector.detect(landmarks);
+      rawState.col1 = result.indexDown;
+      rawState.col0 = result.middleDown;
     }
   }
 
-  // For this V-sign mode, allow multiple columns active simultaneously
-  // (user could have multiple fingers down at once)
+  if (!leftHandFound && now - lastLeftHandSeen > HAND_TIMEOUT_MS) {
+    leftHandDetector.reset();
+  }
+  if (!rightHandFound && now - lastRightHandSeen > HAND_TIMEOUT_MS) {
+    rightHandDetector.reset();
+  }
+
   return rawState;
 }
 
@@ -221,89 +434,85 @@ export function getActiveColumns(state: PinchState): (0 | 1 | 2 | 3)[] {
 }
 
 /**
- * Get detailed debug info for finger-down detection.
- * Use this to display a debug overlay showing confidence values.
+ * Reset both hand detectors (call when game restarts, etc.)
  */
-export function getPinchDebugInfo(hands: HandFrame[], prevState?: PinchState): PinchDebugInfo {
+export function resetDetectors(): void {
+  leftHandDetector.reset();
+  rightHandDetector.reset();
+  lastLeftHandSeen = 0;
+  lastRightHandSeen = 0;
+}
+
+/**
+ * Get detailed debug info for finger-down detection.
+ */
+export function getPinchDebugInfo(hands: HandFrame[], _prevState?: PinchState): PinchDebugInfo {
   const handsDebug: HandDebugInfo[] = [];
   let activeColumn: number | null = null;
 
   for (const hand of hands) {
     const landmarks = hand.landmarks;
-    const palmSize = getPalmSize(landmarks);
+    if (!landmarks || landmarks.length < 21) continue;
 
-    if (palmSize < 0.01) continue;
+    const wrist = landmarks[0];
+    const middleMcp = landmarks[9];
+    const palmSize = Math.sqrt(
+      Math.pow(wrist.x - middleMcp.x, 2) +
+      Math.pow(wrist.y - middleMcp.y, 2) +
+      Math.pow((wrist.z || 0) - (middleMcp.z || 0), 2)
+    );
 
-    const wrist = landmarks[WRIST];
+    const indexTip = landmarks[8];
+    const indexPip = landmarks[6];
+    const indexMcp = landmarks[5];
     
-    // Index finger
-    const indexTip = landmarks[INDEX_TIP];
-    const indexPip = landmarks[INDEX_PIP];
-    const indexMcp = landmarks[INDEX_MCP];
-    
-    // Middle finger
-    const middleTip = landmarks[MIDDLE_TIP];
-    const middlePip = landmarks[MIDDLE_PIP];
-    const middleMcp = landmarks[MIDDLE_MCP];
+    const middleTip = landmarks[12];
+    const middlePip = landmarks[10];
+    const middleMcp2 = landmarks[9];
 
     const fingers: FingerDebugInfo[] = [];
 
-    // Index finger debug
-    const indexWasDown = hand.handedness === 'Left' 
-      ? (prevState?.col2 ?? false)
-      : (prevState?.col1 ?? false);
-    const indexBend = calculateFingerBend(indexTip, indexPip, indexMcp, palmSize);
-    const indexConf = calculateFingerDownConfidence(indexBend);
-    const indexRequiredConf = indexWasDown 
-      ? CONFIDENCE_THRESHOLD * 0.6 
-      : CONFIDENCE_THRESHOLD;
-    const indexIsDown = indexConf >= indexRequiredConf;
+    const indexYDiff = indexTip.y - indexPip.y;
+    const indexConf = indexYDiff > 0.04 ? Math.min(1, indexYDiff / 0.08) : 0;
+    const indexIsDown = indexConf > 0.5;
 
     fingers.push({
       finger: 'index',
       tipY: indexTip.y,
       pipY: indexPip.y,
       mcpY: indexMcp.y,
-      bendAmount: indexBend,
+      bendAmount: indexYDiff,
       baseConfidence: indexConf,
       totalConfidence: indexConf,
-      requiredConfidence: indexRequiredConf,
+      requiredConfidence: 0.5,
       isDown: indexIsDown,
-      wasDown: indexWasDown,
+      wasDown: false,
     });
 
-    // Middle finger debug
-    const middleWasDown = hand.handedness === 'Left'
-      ? (prevState?.col3 ?? false)
-      : (prevState?.col0 ?? false);
-    const middleBend = calculateFingerBend(middleTip, middlePip, middleMcp, palmSize);
-    const middleConf = calculateFingerDownConfidence(middleBend);
-    const middleRequiredConf = middleWasDown
-      ? CONFIDENCE_THRESHOLD * 0.6
-      : CONFIDENCE_THRESHOLD;
-    const middleIsDown = middleConf >= middleRequiredConf;
+    const middleYDiff = middleTip.y - middlePip.y;
+    const middleConf = middleYDiff > 0.04 ? Math.min(1, middleYDiff / 0.08) : 0;
+    const middleIsDown = middleConf > 0.5;
 
     fingers.push({
       finger: 'middle',
       tipY: middleTip.y,
       pipY: middlePip.y,
-      mcpY: middleMcp.y,
-      bendAmount: middleBend,
+      mcpY: middleMcp2.y,
+      bendAmount: middleYDiff,
       baseConfidence: middleConf,
       totalConfidence: middleConf,
-      requiredConfidence: middleRequiredConf,
+      requiredConfidence: 0.5,
       isDown: middleIsDown,
-      wasDown: middleWasDown,
+      wasDown: false,
     });
 
     handsDebug.push({
-      handedness: hand.handedness as 'Left' | 'Right',
+      handedness: hand.handedness,
       palmSize,
       wristY: wrist.y,
       fingers,
     });
 
-    // Track active columns
     if (hand.handedness === 'Left') {
       if (indexIsDown) activeColumn = 2;
       if (middleIsDown) activeColumn = 3;
@@ -317,9 +526,9 @@ export function getPinchDebugInfo(hands: HandFrame[], prevState?: PinchState): P
     hands: handsDebug,
     activeColumn,
     thresholds: {
-      bendThreshold: BEND_THRESHOLD,
-      releaseThreshold: RELEASE_THRESHOLD,
-      confidenceThreshold: CONFIDENCE_THRESHOLD,
+      bendThreshold: DEFAULT_CONFIG.fingerDownThreshold,
+      releaseThreshold: DEFAULT_CONFIG.hysteresisMargin,
+      confidenceThreshold: 0.5,
     },
   };
 }

@@ -522,13 +522,7 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
         <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-30">
           <div className="text-center space-y-6 p-8">
             <h2 className="text-5xl font-bold text-red-500">Game Over</h2>
-            <div className="space-y-2">
-              <p className="text-3xl text-white">Score: {gameState.score}</p>
-              {gameState.score >= gameState.highScore && gameState.score > 0 && (
-                <p className="text-xl text-yellow-400 animate-pulse">🏆 New High Score!</p>
-              )}
-              <p className="text-lg text-gray-400">High Score: {gameState.highScore}</p>
-            </div>
+            <p className="text-3xl text-white">Score: {gameState.score}</p>
             <div className="space-y-3">
               <button
                 onClick={handleRestart}

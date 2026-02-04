@@ -1,8 +1,8 @@
 import type { GameConfig, Column } from '../../game/types';
 
 export const pinchPianoConfig: GameConfig = {
-  id: 'pinch-piano',
-  name: 'Pinch Piano',
+  id: 'piano-tiles',
+  name: 'Piano Tiles',
 
   // Mapping: Thumb + finger → column → note
   // Index(0)=C4, Middle(1)=E4, Ring(2)=G4, Pinky(3)=C5
@@ -33,6 +33,7 @@ export const pinchPianoConfig: GameConfig = {
 
   // Spawn settings (seconds between tile spawns) - faster spawning
   initialSpawnRate: 1.2,
+  minSpawnRate: 0.4,  // Minimum spawn rate (fastest)
 
   // Hit zone (bottom of screen, normalized y coordinates)
   hitZone: {

@@ -63,6 +63,7 @@ export interface GameConfig {
   hitsPerSpeedStep: number;
   speedSteps: Record<'easy' | 'medium' | 'hard', number>;
   initialSpawnRate: number;
+  minSpawnRate: number;
   hitZone: {
     yMin: number;
     yMax: number;
