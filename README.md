@@ -14,7 +14,7 @@ AirBeats is a browser-based music application that uses real-time hand tracking 
 - **✋ Hand Gesture Recognition**: Fist detection for drums/tabla, fingertip tracking for piano
 - **🎨 Customizable Pads**: Drag, resize, and customize instrument layouts
 - **🔊 60+ Sound Presets**: Drums, tabla bols (Na, Dhin, Dha, etc.), and piano notes (C3-B5)
-- **📱 Touch Support**: Works on tablets and touch-enabled devices
+- **📱 Touch Support**: Works on tablets and touch-enabled devices and xyz
 - **🚀 Zero Install**: Runs entirely in the browser
 
 ---
