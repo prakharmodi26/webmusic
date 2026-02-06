@@ -61,6 +61,11 @@ export class MidiSongEngine {
     // Sort notes by time
     notes.sort((a, b) => a.time - b.time);
 
+    // Cap at 500 notes max
+    if (notes.length > 500) {
+      notes.length = 500;
+    }
+
     if (notes.length === 0) {
       throw new Error('MIDI file contains no notes');
     }
@@ -133,6 +138,7 @@ export class MidiSongEngine {
 
   /**
    * Generate scheduled tiles for a song.
+   * Each note becomes exactly one tile — no chords (no two tiles at same height).
    * Tiles are sequentially spaced so they never overlap vertically.
    * MIDI timing determines note order and column, but NOT visual spacing.
    */
@@ -141,77 +147,40 @@ export class MidiSongEngine {
 
     const fallSpeed = this.hitLineY / this.fallDuration;
     const minGap = 0.02; // Minimum normalized gap between consecutive tiles
-    const chordTolerance = 0.01; // Notes within 10ms are treated as a chord
 
-    // Group notes into chord groups (notes at ~same time)
-    const chordGroups: MidiNote[][] = [];
-    let currentGroup: MidiNote[] = [];
-
-    for (const note of song.notes) { // already sorted by time
-      if (currentGroup.length === 0 ||
-          note.time - currentGroup[0].time <= chordTolerance) {
-        currentGroup.push(note);
-      } else {
-        chordGroups.push(currentGroup);
-        currentGroup = [note];
-      }
-    }
-    if (currentGroup.length > 0) {
-      chordGroups.push(currentGroup);
-    }
-
-    // Schedule each chord group sequentially with guaranteed spacing
     const tiles: ScheduledTile[] = [];
     let prevSpawnTime = -Infinity;
-    let prevRowHeight = 0;
+    let prevHeight = 0;
 
-    for (const group of chordGroups) {
-      // Deduplicate notes that map to the same column within a chord
-      const seenColumns = new Set<Column>();
-      const dedupedNotes: MidiNote[] = [];
-      for (const note of group) {
-        const col = this.getColumnForPitch(note.midi, song.minPitch, song.maxPitch);
-        if (!seenColumns.has(col)) {
-          seenColumns.add(col);
-          dedupedNotes.push(note);
-        }
-      }
+    for (const note of song.notes) {
+      const column = this.getColumnForPitch(note.midi, song.minPitch, song.maxPitch);
+      const height = this.calculateTileHeight(note.duration);
 
-      // Calculate heights for all notes in this chord
-      const noteHeights = dedupedNotes.map(note => this.calculateTileHeight(note.duration));
-      const rowHeight = Math.max(...noteHeights);
-
-      // Calculate spawn time with guaranteed spacing from previous row
+      // Calculate spawn time with guaranteed spacing from previous tile
       let spawnTime: number;
       if (prevSpawnTime === -Infinity) {
-        spawnTime = 0; // First tile spawns at game start
+        spawnTime = 0;
       } else {
-        const minDelay = (prevRowHeight + minGap) / fallSpeed;
+        const minDelay = (prevHeight + minGap) / fallSpeed;
         spawnTime = prevSpawnTime + minDelay;
       }
 
       const hitTime = spawnTime + this.fallDuration;
 
-      // Create scheduled tiles for each note in the chord
-      for (let i = 0; i < dedupedNotes.length; i++) {
-        const note = dedupedNotes[i];
-        const column = this.getColumnForPitch(note.midi, song.minPitch, song.maxPitch);
-
-        tiles.push({
-          id: generateScheduledTileId(),
-          column,
-          midiNote: note.midi,
-          noteName: note.name,
-          spawnTime,
-          hitTime,
-          duration: note.duration,
-          height: noteHeights[i],
-          spawned: false,
-        });
-      }
+      tiles.push({
+        id: generateScheduledTileId(),
+        column,
+        midiNote: note.midi,
+        noteName: note.name,
+        spawnTime,
+        hitTime,
+        duration: note.duration,
+        height,
+        spawned: false,
+      });
 
       prevSpawnTime = spawnTime;
-      prevRowHeight = rowHeight;
+      prevHeight = height;
     }
 
     return tiles;

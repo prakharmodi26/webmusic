@@ -1,28 +1,28 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useCamera } from '../hooks/useCamera';
 import { useHandTracking } from '../hooks/useHandTracking';
-import { PinchPianoEngine } from '../game/PinchPianoEngine';
+import { PianoTilesEngine } from '../game/PianoTilesEngine';
 import { MidiSongEngine } from '../game/MidiSongEngine';
-import { pinchPianoConfig } from '../config/instruments/pinchPiano';
+import { pianoTilesConfig } from '../config/instruments/pianoTiles';
 import { detectPinches, createEmptyPinchState, type PinchState } from '../core/pinchDetector';
 import { ToneAudioEngine } from '../audio/ToneAudioEngine';
 import SongSelector from './SongSelector';
 import type { Column, GameState, MissAnimation, HitAnimation, Song, FallingTile } from '../game/types';
 
-interface PinchPianoGameProps {
+interface PianoTilesGameProps {
   onGoHome: () => void;
 }
 
 type GameStage = 'loading' | 'songSelect' | 'ready' | 'playing';
 
-export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
+export default function PianoTilesGame({ onGoHome }: PianoTilesGameProps) {
   const [stage, setStage] = useState<GameStage>('loading');
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [speed, setSpeed] = useState<number>(0.5); // default to easy
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const engineRef = useRef<PinchPianoEngine | null>(null);
+  const engineRef = useRef<PianoTilesEngine | null>(null);
   const audioRef = useRef<ToneAudioEngine | null>(null);
   const midiEngineRef = useRef<MidiSongEngine | null>(null);
   const pinchStateRef = useRef<PinchState>(createEmptyPinchState());
@@ -48,10 +48,10 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
 
       // Initialize MIDI engine
       midiEngineRef.current = new MidiSongEngine(
-        pinchPianoConfig.fallDuration,
-        pinchPianoConfig.hitLineY,
-        pinchPianoConfig.baseTileHeight,
-        pinchPianoConfig.maxTileHeight
+        pianoTilesConfig.fallDuration,
+        pianoTilesConfig.hitLineY,
+        pianoTilesConfig.baseTileHeight,
+        pianoTilesConfig.maxTileHeight
       );
     };
 
@@ -98,19 +98,19 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
     await handleUserInteraction();
 
     // Apply speed multiplier: slower speed = longer fall duration
-    const adjustedFallDuration = pinchPianoConfig.fallDuration / speed;
-    const adjustedConfig = { ...pinchPianoConfig, fallDuration: adjustedFallDuration };
+    const adjustedFallDuration = pianoTilesConfig.fallDuration / speed;
+    const adjustedConfig = { ...pianoTilesConfig, fallDuration: adjustedFallDuration };
 
     // Create MidiSongEngine with adjusted speed for tile scheduling
     const midiEngine = new MidiSongEngine(
       adjustedFallDuration,
-      pinchPianoConfig.hitLineY,
-      pinchPianoConfig.baseTileHeight,
-      pinchPianoConfig.maxTileHeight
+      pianoTilesConfig.hitLineY,
+      pianoTilesConfig.baseTileHeight,
+      pianoTilesConfig.maxTileHeight
     );
     const parsedSong = midiEngine.prepareSong(selectedSong);
 
-    const engine = new PinchPianoEngine(adjustedConfig, playNote, stopNote, onMiss);
+    const engine = new PianoTilesEngine(adjustedConfig, playNote, stopNote, onMiss);
     engine.loadSong(parsedSong);
     engine.start();
     engineRef.current = engine;
@@ -243,7 +243,7 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
 
       const w = canvas.width;
       const h = canvas.height;
-      const { hitLineY, columnColors } = pinchPianoConfig;
+      const { hitLineY, columnColors } = pianoTilesConfig;
 
       ctx.clearRect(0, 0, w, h);
 
@@ -359,7 +359,7 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
       const indicatorRadius = 25;
       const pinchState = pinchStateRef.current;
       const colKeys: (keyof PinchState)[] = ['col0', 'col1', 'col2', 'col3'];
-      const labels = ['L-Mid', 'L-Idx', 'R-Idx', 'R-Mid'];
+      const labels = ['1 Finger', '2 Fingers', '3 Fingers', '4 Fingers'];
 
       for (let col = 0; col < 4; col++) {
         const colWidth = w / 4;
@@ -424,7 +424,6 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
         <SongSelector
-          bundledSongPaths={pinchPianoConfig.bundledSongs}
           onSongSelect={handleSongSelect}
           onBack={onGoHome}
         />
@@ -461,61 +460,32 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
             </div>
 
             <p className="text-lg text-purple-200 max-w-md mx-auto">
-              Hit the lowest tile in each column. Miss any tile = Game Over!
+              Show fingers to activate columns. Miss any tile = Game Over!
             </p>
 
-            {/* Finger mapping guide */}
-            <div className="flex justify-center gap-6 mt-6">
-              <div className="text-center">
-                <p className="text-sm text-gray-400 mb-3">Left Hand</p>
-                <div className="flex gap-4">
-                  <div className="flex flex-col items-center gap-2">
-                    <div
-                      className="w-14 h-14 rounded-full border-2 flex items-center justify-center"
-                      style={{ backgroundColor: pinchPianoConfig.columnColors[0], borderColor: 'rgba(255,255,255,0.5)' }}
-                    >
-                      <span className="text-sm font-bold text-white">1</span>
-                    </div>
-                    <span className="text-xs text-gray-300">Middle</span>
+            {/* Finger count guide */}
+            <div className="flex justify-center gap-4 mt-6">
+              {[
+                { fingers: 1, label: '1 Finger', col: 0 },
+                { fingers: 2, label: '2 Fingers', col: 1 },
+                { fingers: 3, label: '3 Fingers', col: 2 },
+                { fingers: 4, label: '4 Fingers', col: 3 },
+              ].map((item) => (
+                <div key={item.col} className="flex flex-col items-center gap-2">
+                  <div
+                    className="w-14 h-14 rounded-full border-2 flex items-center justify-center"
+                    style={{ backgroundColor: pianoTilesConfig.columnColors[item.col as Column], borderColor: 'rgba(255,255,255,0.5)' }}
+                  >
+                    <span className="text-lg font-bold text-white">{item.fingers}</span>
                   </div>
-                  <div className="flex flex-col items-center gap-2">
-                    <div
-                      className="w-14 h-14 rounded-full border-2 flex items-center justify-center"
-                      style={{ backgroundColor: pinchPianoConfig.columnColors[1], borderColor: 'rgba(255,255,255,0.5)' }}
-                    >
-                      <span className="text-sm font-bold text-white">2</span>
-                    </div>
-                    <span className="text-xs text-gray-300">Index</span>
-                  </div>
+                  <span className="text-xs text-gray-300">{item.label}</span>
+                  <span className="text-xs text-gray-500">Col {item.col + 1}</span>
                 </div>
-              </div>
-
-              <div className="w-px bg-gray-600" />
-
-              <div className="text-center">
-                <p className="text-sm text-gray-400 mb-3">Right Hand</p>
-                <div className="flex gap-4">
-                  <div className="flex flex-col items-center gap-2">
-                    <div
-                      className="w-14 h-14 rounded-full border-2 flex items-center justify-center"
-                      style={{ backgroundColor: pinchPianoConfig.columnColors[2], borderColor: 'rgba(255,255,255,0.5)' }}
-                    >
-                      <span className="text-sm font-bold text-white">3</span>
-                    </div>
-                    <span className="text-xs text-gray-300">Index</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-2">
-                    <div
-                      className="w-14 h-14 rounded-full border-2 flex items-center justify-center"
-                      style={{ backgroundColor: pinchPianoConfig.columnColors[3], borderColor: 'rgba(255,255,255,0.5)' }}
-                    >
-                      <span className="text-sm font-bold text-white">4</span>
-                    </div>
-                    <span className="text-xs text-gray-300">Middle</span>
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
+            <p className="text-sm text-gray-400 mt-2">
+              Raise 1 finger for Column 1, 2 fingers for Column 2, and so on
+            </p>
 
             {/* Speed selector */}
             <div className="pt-2">

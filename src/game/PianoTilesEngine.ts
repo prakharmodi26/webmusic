@@ -8,7 +8,7 @@ function generateTileId(): string {
   return `tile-${++tileIdCounter}`;
 }
 
-export class PinchPianoEngine {
+export class PianoTilesEngine {
   private config: GameConfig;
   private state: GameState;
   private missAnimations: MissAnimation[] = [];
@@ -372,8 +372,11 @@ export class PinchPianoEngine {
     const lowestTiles = this.getLowestTilesOptimized();
     if (lowestTiles.length === 0) return;
 
-    // Tile must be at least half visible on screen before it can be hit
-    if (lowestTiles.some(t => t.y < t.height / 2)) return;
+    // Tile must be fully visible on screen before it can be hit
+    // ═══════════════════════════════════════════════════════════════
+    // VISIBILITY GATE: Change `t.height` to `t.height / 2` for half-tile, etc.
+    // ═══════════════════════════════════════════════════════════════
+    if (lowestTiles.some(t => t.y < t.height)) return;
 
     // Get the set of columns required for the current chord
     const requiredColumns = new Set(lowestTiles.map(t => t.column));

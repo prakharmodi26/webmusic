@@ -10,7 +10,7 @@ import { customConfig, generatePadId, customPadColors } from '../config/instrume
 import { tilesConfig } from '../config/instruments/tiles';
 import type { PadConfig, PadRegion, InstrumentConfig, DrumShape } from '../types/instrument';
 import InstrumentHome, { type InstrumentType } from './InstrumentHome';
-import PinchPianoGame from './PinchPianoGame';
+import PianoTilesGame from './PianoTilesGame';
 import CameraView from './CameraView';
 import DistanceBanner from './DistanceBanner';
 import SettingsPanel from './SettingsPanel';
@@ -48,9 +48,9 @@ function getInstrumentConfig(type: InstrumentType): InstrumentConfig {
       return customConfig;
     case 'tiles':
       return tilesConfig;
-    case 'pinch-piano':
-      // Pinch piano uses its own component and config
-      return { id: 'pinch-piano', name: 'Pinch Piano', pads: [] };
+    case 'piano-tiles':
+      // Piano Tiles uses its own component and config
+      return { id: 'piano-tiles', name: 'Piano Tiles', pads: [] };
   }
 }
 
@@ -507,9 +507,9 @@ export default function PlaygroundPage() {
     return <InstrumentHome onSelectInstrument={handleSelectInstrument} error={cameraError} />;
   }
 
-  // Pinch Piano has its own game component
-  if (selectedInstrument === 'pinch-piano') {
-    return <PinchPianoGame onGoHome={handleGoHome} />;
+  // Piano Tiles has its own game component
+  if (selectedInstrument === 'piano-tiles') {
+    return <PianoTilesGame onGoHome={handleGoHome} />;
   }
 
   return (

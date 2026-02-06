@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export type InstrumentType = 'drums' | 'tabla' | 'custom' | 'tiles' | 'pinch-piano';
+export type InstrumentType = 'drums' | 'tabla' | 'custom' | 'tiles' | 'piano-tiles';
 
 interface InstrumentHomeProps {
   onSelectInstrument: (instrument: InstrumentType) => void;
@@ -18,25 +18,12 @@ interface InstrumentCard {
 // Order: piano-tiles first, then drums, tabla, piano, custom (custom at end)
 const instruments: InstrumentCard[] = [
   {
-    id: 'pinch-piano',
+    id: 'piano-tiles',
     name: 'Piano Tiles',
     description: 'Rhythm game with finger gestures',
     gradient: 'from-indigo-500 to-purple-600',
     icon: (
-      <svg viewBox="0 0 64 64" className="w-20 h-20" fill="currentColor">
-        {/* Falling tiles */}
-        <rect x="4" y="4" width="12" height="10" rx="2" fill="#FF6B6B" />
-        <rect x="18" y="14" width="12" height="10" rx="2" fill="#4ECDC4" />
-        <rect x="32" y="8" width="12" height="10" rx="2" fill="#FFE66D" />
-        <rect x="46" y="18" width="12" height="10" rx="2" fill="#AA96DA" />
-        {/* Hit zone line */}
-        <rect x="2" y="44" width="60" height="2" rx="1" fill="rgba(255,255,255,0.5)" />
-        {/* Pinch indicators */}
-        <circle cx="10" cy="54" r="5" fill="#FF6B6B" stroke="white" strokeWidth="1.5" />
-        <circle cx="24" cy="54" r="5" fill="#4ECDC4" stroke="white" strokeWidth="1.5" />
-        <circle cx="38" cy="54" r="5" fill="#FFE66D" stroke="white" strokeWidth="1.5" />
-        <circle cx="52" cy="54" r="5" fill="#AA96DA" stroke="white" strokeWidth="1.5" />
-      </svg>
+      <img src="/svg/piano.svg" alt="Piano Tiles" className="w-20 h-20 object-contain" />
     ),
   },
   {
@@ -192,9 +179,9 @@ export default function InstrumentHome({ onSelectInstrument, error }: Instrument
                 className="flex flex-col items-center gap-3 transition-transform duration-200 hover:scale-105 active:scale-95 animate-bounce-in"
               >
                 <div
-                  className={`w-28 h-28 md:w-32 md:h-32 rounded-full bg-gradient-to-br ${currentInstrument.gradient} flex items-center justify-center shadow-lg border-4 border-white/30`}
+                  className={`w-28 h-28 md:w-32 md:h-32 rounded-full bg-gradient-to-br ${currentInstrument.gradient} flex items-center justify-center shadow-lg border-4 border-white/30 overflow-hidden p-3`}
                 >
-                  <div className="text-white/90">
+                  <div className="text-white/90 flex items-center justify-center">
                     {currentInstrument.icon}
                   </div>
                 </div>
@@ -290,34 +277,34 @@ export default function InstrumentHome({ onSelectInstrument, error }: Instrument
                 <img src="/svg/finger.svg" alt="Index finger gesture" className="w-14 h-14 object-contain" />
               </div>
               <p className="text-white font-semibold">Index Finger</p>
-              <p className="text-blue-300/70 text-sm">for Piano Tiles</p>
+              <p className="text-blue-300/70 text-sm">for Tiles</p>
             </div>
 
-            {/* Two Hands for Pinch Piano */}
+            {/* Fingers for Piano Tiles */}
             <div className="flex flex-col items-center gap-2">
               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4A6B7C] to-[#3D5A6A] border-2 border-[#5D7D8A] flex items-center justify-center overflow-hidden p-2">
                 <svg viewBox="0 0 64 64" className="w-14 h-14">
-                  {/* Left hand - simplified */}
-                  <ellipse cx="16" cy="32" rx="10" ry="14" fill="#F0C5A8" />
-                  {/* Left index finger */}
-                  <ellipse cx="20" cy="18" rx="3" ry="8" fill="#E8B69A" />
-                  {/* Left middle finger */}
-                  <ellipse cx="12" cy="16" rx="3" ry="9" fill="#E8B69A" />
-                  {/* Right hand - simplified */}
-                  <ellipse cx="48" cy="32" rx="10" ry="14" fill="#F0C5A8" />
-                  {/* Right index finger */}
-                  <ellipse cx="44" cy="18" rx="3" ry="8" fill="#E8B69A" />
-                  {/* Right middle finger */}
-                  <ellipse cx="52" cy="16" rx="3" ry="9" fill="#E8B69A" />
-                  {/* Finger tip indicators */}
-                  <circle cx="12" cy="8" r="3" fill="#FF6B6B" />
-                  <circle cx="20" cy="10" r="3" fill="#4ECDC4" />
-                  <circle cx="44" cy="10" r="3" fill="#FFE66D" />
-                  <circle cx="52" cy="8" r="3" fill="#AA96DA" />
+                  {/* Hand palm */}
+                  <ellipse cx="32" cy="42" rx="16" ry="12" fill="#F0C5A8" />
+                  {/* Four fingers raised */}
+                  <ellipse cx="18" cy="22" rx="4" ry="12" fill="#E8B69A" />
+                  <ellipse cx="27" cy="18" rx="4" ry="14" fill="#E8B69A" />
+                  <ellipse cx="37" cy="18" rx="4" ry="14" fill="#E8B69A" />
+                  <ellipse cx="46" cy="22" rx="4" ry="12" fill="#E8B69A" />
+                  {/* Finger tip color indicators (1-4) */}
+                  <circle cx="18" cy="11" r="4" fill="#FF6B6B" />
+                  <circle cx="27" cy="5" r="4" fill="#4ECDC4" />
+                  <circle cx="37" cy="5" r="4" fill="#FFE66D" />
+                  <circle cx="46" cy="11" r="4" fill="#AA96DA" />
+                  {/* Numbers on fingertips */}
+                  <text x="18" y="14" textAnchor="middle" fill="white" fontSize="6" fontWeight="bold">1</text>
+                  <text x="27" y="8" textAnchor="middle" fill="white" fontSize="6" fontWeight="bold">2</text>
+                  <text x="37" y="8" textAnchor="middle" fill="white" fontSize="6" fontWeight="bold">3</text>
+                  <text x="46" y="14" textAnchor="middle" fill="white" fontSize="6" fontWeight="bold">4</text>
                 </svg>
               </div>
-              <p className="text-white font-semibold">Both Hands</p>
-              <p className="text-blue-300/70 text-sm">for Pinch Piano</p>
+              <p className="text-white font-semibold">Fingers</p>
+              <p className="text-blue-300/70 text-sm">for Piano Tiles</p>
             </div>
           </div>
         </div>

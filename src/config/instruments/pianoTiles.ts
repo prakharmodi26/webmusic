@@ -1,7 +1,7 @@
 import type { GameConfig, Column } from '../../game/types';
 
-export const pinchPianoConfig: GameConfig = {
-  id: 'pinch-piano',
+export const pianoTilesConfig: GameConfig = {
+  id: 'piano-tiles',
   name: 'Piano Tiles',
 
   // Column colors (left to right)

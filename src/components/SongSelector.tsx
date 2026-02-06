@@ -14,12 +14,11 @@ interface SongInfo {
 }
 
 interface SongSelectorProps {
-  bundledSongPaths: string[];
   onSongSelect: (song: Song) => void;
   onBack: () => void;
 }
 
-export default function SongSelector({ bundledSongPaths, onSongSelect, onBack }: SongSelectorProps) {
+export default function SongSelector({ onSongSelect, onBack }: SongSelectorProps) {
   const [songs, setSongs] = useState<SongInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,31 +26,43 @@ export default function SongSelector({ bundledSongPaths, onSongSelect, onBack }:
   const fileInputRef = useRef<HTMLInputElement>(null);
   const midiEngine = useRef(new MidiSongEngine());
 
-  // Load bundled songs on mount
+  // Auto-discover songs from manifest on mount
   useEffect(() => {
-    loadBundledSongs();
+    loadSongsFromManifest();
   }, []);
 
-  async function loadBundledSongs() {
+  async function loadSongsFromManifest() {
     setLoading(true);
     setError(null);
 
-    const loadedSongs: SongInfo[] = [];
+    let songPaths: string[] = [];
+    try {
+      const res = await fetch('/songs/manifest.json');
+      if (res.ok) {
+        songPaths = await res.json();
+      }
+    } catch {
+      // manifest not available
+    }
 
-    for (const path of bundledSongPaths) {
+    const loadedSongs: SongInfo[] = [];
+    for (const path of songPaths) {
+      // Only load .mid/.midi files
+      if (!/\.midi?$/i.test(path)) continue;
       try {
         const song = await midiEngine.current.loadSongFromUrl(path);
         const metadata = midiEngine.current.getSongMetadata(song);
         loadedSongs.push({ song, metadata });
       } catch (err) {
-        console.warn(`Failed to load bundled song: ${path}`, err);
+        console.warn(`Failed to load song: ${path}`, err);
       }
     }
 
-    if (loadedSongs.length === 0 && bundledSongPaths.length > 0) {
-      setError('Failed to load bundled songs. Try uploading a custom MIDI file.');
+    if (loadedSongs.length === 0 && songPaths.length > 0) {
+      setError('Failed to load songs. Try uploading a custom MIDI file.');
     }
 
+    loadedSongs.sort((a, b) => a.metadata.noteCount - b.metadata.noteCount);
     setSongs(loadedSongs);
     setLoading(false);
   }
