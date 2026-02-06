@@ -247,25 +247,6 @@ export default function InstrumentHome({ onSelectInstrument, error }: Instrument
             <div className="flex flex-col items-center gap-2">
               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4A6B7C] to-[#3D5A6A] border-2 border-[#5D7D8A] flex items-center justify-center overflow-hidden p-2">
                 <img src="/svg/fist.svg" alt="Fist gesture" className="w-14 h-14 object-contain" />
-                {/* Old Detailed Fist SVG (commented out):
-                <svg viewBox="0 0 64 64" className="w-12 h-12">
-                  <path d="M16 32 C16 24 20 20 28 20 L36 20 C44 20 48 24 48 32 L48 40 C48 50 42 54 32 54 C22 54 16 50 16 40 Z" fill="#F0C5A8"/>
-                  <ellipse cx="14" cy="36" rx="6" ry="10" fill="#F0C5A8" />
-                  <ellipse cx="13" cy="36" rx="4" ry="8" fill="#E8B69A" />
-                  <ellipse cx="24" cy="22" rx="6" ry="5" fill="#F0C5A8" />
-                  <ellipse cx="32" cy="21" rx="6" ry="5" fill="#F0C5A8" />
-                  <ellipse cx="40" cy="22" rx="6" ry="5" fill="#F0C5A8" />
-                  <ellipse cx="24" cy="21" rx="4" ry="3" fill="#F5D0B8" />
-                  <ellipse cx="32" cy="20" rx="4" ry="3" fill="#F5D0B8" />
-                  <ellipse cx="40" cy="21" rx="4" ry="3" fill="#F5D0B8" />
-                  <path d="M20 26 Q24 28 28 26" stroke="#DDA68A" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-                  <path d="M28 25 Q32 27 36 25" stroke="#DDA68A" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-                  <path d="M36 26 Q40 28 44 26" stroke="#DDA68A" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-                  <path d="M20 34 Q32 38 44 34" stroke="#DDA68A" strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.6"/>
-                  <rect x="24" y="52" width="16" height="8" rx="3" fill="#F0C5A8" />
-                  <rect x="26" y="54" width="12" height="4" rx="2" fill="#E8B69A" opacity="0.5"/>
-                </svg>
-                */}
               </div>
               <p className="text-white font-semibold">Fist</p>
               <p className="text-blue-300/70 text-sm">for Drums & Tabla</p>
@@ -283,25 +264,7 @@ export default function InstrumentHome({ onSelectInstrument, error }: Instrument
             {/* Fingers for Piano Tiles */}
             <div className="flex flex-col items-center gap-2">
               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4A6B7C] to-[#3D5A6A] border-2 border-[#5D7D8A] flex items-center justify-center overflow-hidden p-2">
-                <svg viewBox="0 0 64 64" className="w-14 h-14">
-                  {/* Hand palm */}
-                  <ellipse cx="32" cy="42" rx="16" ry="12" fill="#F0C5A8" />
-                  {/* Four fingers raised */}
-                  <ellipse cx="18" cy="22" rx="4" ry="12" fill="#E8B69A" />
-                  <ellipse cx="27" cy="18" rx="4" ry="14" fill="#E8B69A" />
-                  <ellipse cx="37" cy="18" rx="4" ry="14" fill="#E8B69A" />
-                  <ellipse cx="46" cy="22" rx="4" ry="12" fill="#E8B69A" />
-                  {/* Finger tip color indicators (1-4) */}
-                  <circle cx="18" cy="11" r="4" fill="#FF6B6B" />
-                  <circle cx="27" cy="5" r="4" fill="#4ECDC4" />
-                  <circle cx="37" cy="5" r="4" fill="#FFE66D" />
-                  <circle cx="46" cy="11" r="4" fill="#AA96DA" />
-                  {/* Numbers on fingertips */}
-                  <text x="18" y="14" textAnchor="middle" fill="white" fontSize="6" fontWeight="bold">1</text>
-                  <text x="27" y="8" textAnchor="middle" fill="white" fontSize="6" fontWeight="bold">2</text>
-                  <text x="37" y="8" textAnchor="middle" fill="white" fontSize="6" fontWeight="bold">3</text>
-                  <text x="46" y="14" textAnchor="middle" fill="white" fontSize="6" fontWeight="bold">4</text>
-                </svg>
+                <img src = "/svg/piano_tiles_inst.svg" alt="4 Finger gesture" className="w-14 h-14 object-contain" />
               </div>
               <p className="text-white font-semibold">Fingers</p>
               <p className="text-blue-300/70 text-sm">for Piano Tiles</p>
