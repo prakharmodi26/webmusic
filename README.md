@@ -1,202 +1,163 @@
-# 🎵 AirBeats
+# AirBeats
 
-**Play virtual instruments with your hands using just a webcam — no controllers needed!**
+**Play virtual instruments with your hands using just a webcam.**
 
-AirBeats is a browser-based music application that uses real-time hand tracking to let you play drums, tabla, and piano through intuitive hand gestures.
+Made by **Prakhar Modi**
 
-![AirBeats Demo](https://img.shields.io/badge/Status-Active-brightgreen) ![React](https://img.shields.io/badge/React-19-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue) ![MediaPipe](https://img.shields.io/badge/MediaPipe-Hand%20Tracking-orange)
-
----
-
-## ✨ Features
-
-- **🥁 Multiple Instruments**: Drums, Tabla, Piano Tiles, and Custom instruments
-- **✋ Hand Gesture Recognition**: Fist detection for drums/tabla, fingertip tracking for piano
-- **🎨 Customizable Pads**: Drag, resize, and customize instrument layouts
-- **🔊 60+ Sound Presets**: Drums, tabla bols (Na, Dhin, Dha, etc.), and piano notes (C3-B5)
-- **📱 Touch Support**: Works on tablets and touch-enabled devices
-- **🚀 Zero Install**: Runs entirely in the browser
+AirBeats is a browser-based music app that uses real-time hand tracking to let you play drums, tabla, piano tiles, and custom instruments through hand gestures. No controllers, no MIDI keyboards -- just your hands and a webcam.
 
 ---
 
-## 🎮 How to Play
+## Instruments
 
-### Getting Started
+### Drums
+6-pad drum kit with crash, ride, snare, bass, toms, and hi-hat. Trigger pads by making a fist and moving it over them.
 
-1. **Open the app** in Chrome or Edge (webcam required)
-2. **Allow camera access** when prompted
-3. **Select an instrument** from the carousel
-4. **Position yourself** so your hands are visible in the camera
+### Tabla
+Traditional Indian percussion with 20+ sound variations (Na, Dhin, Dha, Ge, etc.). Uses fist gestures like drums. Sounds are swappable per pad.
 
-### Gesture Controls
+### Piano Tiles
+A rhythm game where tiles fall down 4 columns based on MIDI songs. Controls:
+- **1 finger** = Column 1
+- **2 fingers** = Column 2
+- **3 fingers** = Column 3
+- **4 fingers** = Column 4
 
-| Instrument | Gesture | How to Trigger |
-|------------|---------|----------------|
-| **Drums** | ✊ Fist | Make a fist and move it over drum pads |
-| **Tabla** | ✊ Fist | Make a fist and move it over tabla pads |
-| **Piano Tiles** | ☝️ Index Finger | Point with your index finger and touch tiles |
+Features:
+- 10 bundled MIDI songs (auto-discovered from `public/songs/`)
+- Upload your own `.mid` files
+- Adjustable speed (0.25x to 1x)
+- Auto-hit for consecutive same-column tiles
+- Sound duration based on MIDI note length
+- Songs capped at 500 notes max
 
-### Tips for Best Performance
+### Piano (Tiles Grid)
+21 piano keys (C3-B5) in a colorful grid. Point with your index finger to play notes.
 
-- 📏 **Distance**: Keep your hands 1-2 feet from the camera
-- 💡 **Lighting**: Ensure good, even lighting on your hands
-- 🎯 **Background**: Plain backgrounds help with hand detection
-- 🖐️ **Clear gestures**: Make distinct fist/finger poses
+### Custom
+Build your own instrument. Add pads, choose from 60+ preset sounds or upload WAV/MP3 samples, drag/resize pads, customize colors and labels.
 
 ---
 
-## 🛠️ Installation & Development
+## Getting Started
 
 ### Prerequisites
+- Node.js 18+
+- Modern browser with webcam (Chrome or Edge recommended)
 
-- Node.js 18+ 
-- npm or yarn
-- Modern browser (Chrome/Edge recommended)
-
-### Quick Start
+### Run Locally
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/airbeats.git
-cd airbeats
-
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev
-
-# Open http://localhost:5173 in your browser
 ```
 
-### Build for Production
+Opens at `http://localhost:5173`.
+
+### Build
 
 ```bash
-# Build the app
 npm run build
-
-# Preview production build
 npm run preview
 ```
 
-### Docker Deployment
+---
 
-```bash
-# Build Docker image
-docker build -t airbeats .
+## Adding Songs to Piano Tiles
 
-# Run container
-docker run -p 80:80 airbeats
-```
+Drop any `.mid` or `.midi` file into `public/songs/`. The Vite dev server auto-generates a manifest and the song appears in the selector immediately. In production, the manifest is generated at build time.
+
+Songs are sorted by note count (easiest first) in the song selector. Songs with more than 500 notes are automatically truncated.
 
 ---
 
-## 🎹 Instruments
+## Tech Stack
 
-### Drum Kit
-6 pads with realistic drum sounds:
-- Crash & Ride cymbals
-- Snare drum
-- Bass drum
-- High & Low toms
-- Hi-hat
-
-### Tabla
-Traditional Indian percussion with 20 sound variations:
-- **Dayan (right)**: Na, Tin, Ti, Tey, Tay
-- **Bayan (left)**: Ge, Gi, Ghay, Kut
-- **Combined**: Dha, Dhin (with slide variations)
-
-### Piano Tiles
-21 piano keys across 3 octaves (C3 to B5) in a colorful grid layout.
-
-### Custom
-Create your own instrument:
-- Add unlimited pads
-- Choose from 60+ preset sounds
-- Upload your own WAV/MP3 samples
-- Customize colors and labels
+- **React 19** + **TypeScript** + **Vite**
+- **Tailwind CSS** for styling
+- **MediaPipe Tasks Vision** for hand tracking (Hand Landmarker)
+- **Tone.js** for synthesized piano audio in Piano Tiles
+- **Web Audio API** for drum/tabla/custom sample playback
+- **@tonejs/midi** for MIDI file parsing
+- **Canvas 2D** for all rendering
 
 ---
 
-## ⚙️ Settings
-
-Access settings via the ⚙️ gear icon:
-
-| Setting | Description |
-|---------|-------------|
-| **Beginner Mode** | Larger pad sizes for easier hits |
-| **Hit Sensitivity** | Adjust how close your hand needs to be to trigger |
-| **Sound Selection** | Change sounds for each pad (Tabla/Custom) |
-| **Custom Upload** | Upload your own audio samples |
-
----
-
-## 🏗️ Tech Stack
-
-- **Frontend**: React 19, TypeScript, Vite
-- **Styling**: Tailwind CSS
-- **Hand Tracking**: MediaPipe Tasks Vision (Hand Landmarker)
-- **Audio**: Web Audio API
-- **Rendering**: Canvas 2D API
-
----
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 src/
-├── components/          # React components
-│   ├── PlaygroundPage   # Main instrument playground
-│   ├── InstrumentHome   # Instrument selection carousel
-│   ├── SettingsPanel    # Settings sidebar
-│   └── ...
-├── core/                # Core logic
-│   ├── audioEngine      # Web Audio playback
-│   ├── handTracker      # MediaPipe integration
-│   ├── hitDetector      # FSM-based collision detection
-│   └── gestureRecognizer# Fist/palm classification
-├── hooks/               # Custom React hooks
-├── config/              # Instrument configurations
-│   └── instruments/     # Drum, tabla, tiles, custom configs
-├── types/               # TypeScript interfaces
-└── utils/               # Canvas drawing, geometry helpers
-
+  components/
+    PlaygroundPage.tsx      Main app - instrument selection + playground
+    InstrumentHome.tsx      Home carousel with instrument cards
+    PianoTilesGame.tsx      Piano Tiles rhythm game component
+    SongSelector.tsx        MIDI song picker with upload support
+    SettingsPanel.tsx       Settings sidebar (sensitivity, sounds, etc.)
+    CameraView.tsx          Webcam video + canvas overlay
+  core/
+    pinchDetector.ts        Finger count detection (1-4 fingers = columns)
+    gestureRecognizer.ts    Fist/palm gesture classification
+    hitDetector.ts          Collision detection for pads
+    handTracker.ts          MediaPipe hand landmarker wrapper
+    audioEngine.ts          Web Audio sample playback engine
+  game/
+    PianoTilesEngine.ts     Core game loop, hit detection, auto-hit, scoring
+    MidiSongEngine.ts       MIDI parsing, tile scheduling, height calculation
+    types.ts                Game types (FallingTile, GameState, etc.)
+  audio/
+    ToneAudioEngine.ts      Tone.js synth for Piano Tiles note playback
+  hooks/
+    useCamera.ts            Webcam access hook
+    useHandTracking.ts      MediaPipe tracking loop hook
+    useHitDetection.ts      Pad hit detection hook
+    useAudio.ts             Audio engine hook
+    useDistanceGuide.ts     Hand distance feedback hook
+  config/instruments/
+    pianoTiles.ts           Piano Tiles game config (speed, colors, sizing)
+    drumKit.ts              Drum kit pad layout + sounds
+    tabla.ts                Tabla pad layout + sounds
+    tiles.ts                Piano grid layout
+    custom.ts               Custom instrument defaults
+  utils/
+    canvas.ts               Drawing helpers (pads, ripples, skeletons)
+    geometry.ts             Point-in-region collision math
 public/
-└── sounds/              # Audio samples
-    ├── piano/           # Piano notes (MP3)
-    └── tabla/           # Tabla bols (WAV)
+  songs/                    MIDI files (auto-discovered)
+  sounds/                   Audio samples (drums, tabla, piano)
+  svg/                      Instrument icons
 ```
 
 ---
 
-## 🤝 Contributing
+## Key Config Locations
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+These are useful if you want to tweak gameplay:
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- [MediaPipe](https://mediapipe.dev/) for hand tracking models
-- [midi-js-soundfonts](https://github.com/gleitz/midi-js-soundfonts) for piano samples
-- [SampleSwap](https://sampleswap.org/) for tabla samples
+| What | File | Field |
+|------|------|-------|
+| Tile fall duration | `src/config/instruments/pianoTiles.ts` | `fallDuration` |
+| Hit line position | `src/config/instruments/pianoTiles.ts` | `hitLineY` |
+| Tile height range | `src/config/instruments/pianoTiles.ts` | `baseTileHeight`, `maxTileHeight` |
+| Auto-hit gap | `src/game/PianoTilesEngine.ts` | `autoHitDelay` (ms) |
+| Grace period | `src/game/PianoTilesEngine.ts` | `lastHitColumnsGrace` (ms) |
+| Visibility gate | `src/game/PianoTilesEngine.ts` | `checkHits()` - `t.height` line |
+| Max notes per song | `src/game/MidiSongEngine.ts` | `notes.length > 500` |
+| Column colors | `src/config/instruments/pianoTiles.ts` | `columnColors` |
 
 ---
 
-<p align="center">
-  Made with ❤️ and ✋ hand gestures
-</p>
+## How Hand Detection Works
 
+**Drums/Tabla**: MediaPipe detects hand landmarks. A gesture recognizer classifies the hand as fist or open palm. Fist position is checked against circular pad regions for hit detection.
+
+**Piano Tiles**: A finger count detector analyzes which fingers are extended using multiple voting methods (tip-to-palm distance, tip-vs-PIP joint, angle-based). The finger count maps to a column (1 finger = col 0, 2 = col 1, etc.). A 2-frame debounce prevents flicker.
+
+**Piano Grid**: Index fingertip position is tracked and checked against tile regions.
+
+---
+
+## Acknowledgments
+
+- [MediaPipe](https://mediapipe.dev/) for hand tracking
+- [Tone.js](https://tonejs.github.io/) for audio synthesis
+- [@tonejs/midi](https://github.com/Tonejs/Midi) for MIDI parsing

@@ -125,8 +125,9 @@ export default function SongSelector({ onSongSelect, onBack }: SongSelectorProps
         {/* Song list */}
         <div className="bg-gray-900/80 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin" />
+            <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-gray-400 text-sm animate-pulse">Loading songs...</p>
             </div>
           ) : error ? (
             <div className="text-center py-8 px-4">
