@@ -25,7 +25,7 @@ export class PinchPianoEngine {
   private lastHitColumnsGrace: number = 300; // ms grace period before clearing chain
   // ═══════════════════════════════════════════════════════════════
   // AUTO-HIT GAP: Change this value to adjust delay between consecutive auto-hits (ms)
-  private autoHitDelay: number = 300; // 0.5 seconds
+  private autoHitDelay: number = 500; // 0.5 seconds
   // ═══════════════════════════════════════════════════════════════
   private nextAutoHitTime: number = 0;
   private pendingAutoHitTileIds: Set<string> = new Set();
@@ -371,6 +371,9 @@ export class PinchPianoEngine {
     // Get cached lowest tiles (chord group)
     const lowestTiles = this.getLowestTilesOptimized();
     if (lowestTiles.length === 0) return;
+
+    // Tile must be at least half visible on screen before it can be hit
+    if (lowestTiles.some(t => t.y < t.height / 2)) return;
 
     // Get the set of columns required for the current chord
     const requiredColumns = new Set(lowestTiles.map(t => t.column));

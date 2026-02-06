@@ -19,7 +19,7 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
   const [stage, setStage] = useState<GameStage>('loading');
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
-  const [speed, setSpeed] = useState<number>(1); // 1 = normal, 0.75 = slower, 0.5 = slowest
+  const [speed, setSpeed] = useState<number>(0.5); // default to easy
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<PinchPianoEngine | null>(null);
@@ -522,6 +522,7 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
               <p className="text-sm text-gray-400 mb-3">Speed</p>
               <div className="flex justify-center gap-3">
                 {[
+                  { value: 0.25, label: '0.25x', desc: 'Slowest' },
                   { value: 0.5, label: '0.5x', desc: 'Easy' },
                   { value: 0.75, label: '0.75x', desc: 'Medium' },
                   { value: 1, label: '1x', desc: 'Normal' },
