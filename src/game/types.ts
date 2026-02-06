@@ -40,12 +40,11 @@ export interface FallingTile {
   note: string;
   midiNote: number;       // MIDI note number for Tone.js playback
   height: number;         // Normalized height (based on duration)
+  duration: number;       // Note duration in seconds (from MIDI, controls sound length)
   hit: boolean;
   missed: boolean;
   missedAt?: number;      // Timestamp for break animation
   hitAt?: number;         // Timestamp for hit animation
-  isHeld?: boolean;       // Currently being held (for long notes)
-  releaseTime?: number;   // When hold was released
 }
 
 export type GameStatus = 'idle' | 'countdown' | 'playing' | 'paused' | 'gameover' | 'completed';

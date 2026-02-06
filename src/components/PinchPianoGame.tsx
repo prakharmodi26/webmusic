@@ -19,6 +19,7 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
   const [stage, setStage] = useState<GameStage>('loading');
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
+  const [speed, setSpeed] = useState<number>(1); // 1 = normal, 0.75 = slower, 0.5 = slowest
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<PinchPianoEngine | null>(null);
@@ -29,6 +30,7 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
   const missAnimationsRef = useRef<MissAnimation[]>([]);
   const hitAnimationsRef = useRef<HitAnimation[]>([]);
   const lowestTileRef = useRef<FallingTile | null>(null);
+  const mouseColumnRef = useRef<number>(-1); // -1 = no mouse column active
 
   const { videoRef, isActive: cameraActive, error: cameraError, start: startCamera } = useCamera();
   const { frame, isLoading: trackingLoading, isReady: trackingReady, init: initTracking, startLoop } = useHandTracking(videoRef);
@@ -91,19 +93,30 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
   }, []);
 
   const handleStartGame = useCallback(async () => {
-    if (!selectedSong || !midiEngineRef.current) return;
+    if (!selectedSong) return;
 
     await handleUserInteraction();
 
-    const parsedSong = midiEngineRef.current.prepareSong(selectedSong);
+    // Apply speed multiplier: slower speed = longer fall duration
+    const adjustedFallDuration = pinchPianoConfig.fallDuration / speed;
+    const adjustedConfig = { ...pinchPianoConfig, fallDuration: adjustedFallDuration };
 
-    const engine = new PinchPianoEngine(pinchPianoConfig, playNote, stopNote, onMiss);
+    // Create MidiSongEngine with adjusted speed for tile scheduling
+    const midiEngine = new MidiSongEngine(
+      adjustedFallDuration,
+      pinchPianoConfig.hitLineY,
+      pinchPianoConfig.baseTileHeight,
+      pinchPianoConfig.maxTileHeight
+    );
+    const parsedSong = midiEngine.prepareSong(selectedSong);
+
+    const engine = new PinchPianoEngine(adjustedConfig, playNote, stopNote, onMiss);
     engine.loadSong(parsedSong);
     engine.start();
     engineRef.current = engine;
     setGameState(engine.getState());
     setStage('playing');
-  }, [selectedSong, playNote, stopNote, onMiss, handleUserInteraction]);
+  }, [selectedSong, speed, playNote, stopNote, onMiss, handleUserInteraction]);
 
   const handleRestart = useCallback(async () => {
     await handleUserInteraction();
@@ -126,10 +139,71 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
   useEffect(() => {
     if (frame && frame.hands.length > 0) {
       pinchStateRef.current = detectPinches(frame.hands, pinchStateRef.current);
-    } else {
+    } else if (mouseColumnRef.current === -1) {
       pinchStateRef.current = createEmptyPinchState();
     }
   }, [frame]);
+
+  // Mouse/keyboard controls for column activation (click or keys 1-4)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const getColumn = (e: MouseEvent) => Math.min(3, Math.floor((e.offsetX / canvas.clientWidth) * 4));
+
+    const onMouseDown = (e: MouseEvent) => {
+      const col = getColumn(e);
+      mouseColumnRef.current = col;
+      const state = createEmptyPinchState();
+      const keys: (keyof PinchState)[] = ['col0', 'col1', 'col2', 'col3'];
+      state[keys[col]] = true;
+      pinchStateRef.current = state;
+    };
+    const onMouseMove = (e: MouseEvent) => {
+      if (mouseColumnRef.current === -1) return;
+      const col = getColumn(e);
+      mouseColumnRef.current = col;
+      const state = createEmptyPinchState();
+      const keys: (keyof PinchState)[] = ['col0', 'col1', 'col2', 'col3'];
+      state[keys[col]] = true;
+      pinchStateRef.current = state;
+    };
+    const onMouseUp = () => {
+      mouseColumnRef.current = -1;
+      pinchStateRef.current = createEmptyPinchState();
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const col = parseInt(e.key) - 1;
+      if (col >= 0 && col <= 3) {
+        mouseColumnRef.current = col;
+        const state = createEmptyPinchState();
+        const keys: (keyof PinchState)[] = ['col0', 'col1', 'col2', 'col3'];
+        state[keys[col]] = true;
+        pinchStateRef.current = state;
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      const col = parseInt(e.key) - 1;
+      if (col >= 0 && col <= 3 && mouseColumnRef.current === col) {
+        mouseColumnRef.current = -1;
+        pinchStateRef.current = createEmptyPinchState();
+      }
+    };
+
+    canvas.addEventListener('mousedown', onMouseDown);
+    canvas.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      canvas.removeEventListener('mousedown', onMouseDown);
+      canvas.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [stage]);
 
   // Game loop
   useEffect(() => {
@@ -440,6 +514,31 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
                     <span className="text-xs text-gray-300">Middle</span>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Speed selector */}
+            <div className="pt-2">
+              <p className="text-sm text-gray-400 mb-3">Speed</p>
+              <div className="flex justify-center gap-3">
+                {[
+                  { value: 0.5, label: '0.5x', desc: 'Easy' },
+                  { value: 0.75, label: '0.75x', desc: 'Medium' },
+                  { value: 1, label: '1x', desc: 'Normal' },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setSpeed(opt.value)}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                      speed === opt.value
+                        ? 'bg-purple-600 text-white ring-2 ring-purple-400'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+                    }`}
+                  >
+                    <div>{opt.label}</div>
+                    <div className="text-xs opacity-70">{opt.desc}</div>
+                  </button>
+                ))}
               </div>
             </div>
 

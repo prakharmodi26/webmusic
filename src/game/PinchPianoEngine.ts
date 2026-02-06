@@ -18,9 +18,19 @@ export class PinchPianoEngine {
   private onMiss: () => void;
   private lastUpdateTime: number = 0;
   private prevPinchState: PinchState | null = null;
-  // Tracks currently held notes per column
-  private heldNotes: Map<Column, number> = new Map();
   private persistentHighScore: number = 0;
+  // Tracks columns of last-hit tiles for consecutive same-column auto-hit
+  private lastHitColumns: Set<Column> | null = null;
+  private lastHitColumnsReleaseTime: number = 0;
+  private lastHitColumnsGrace: number = 300; // ms grace period before clearing chain
+  // ═══════════════════════════════════════════════════════════════
+  // AUTO-HIT GAP: Change this value to adjust delay between consecutive auto-hits (ms)
+  private autoHitDelay: number = 300; // 0.5 seconds
+  // ═══════════════════════════════════════════════════════════════
+  private nextAutoHitTime: number = 0;
+  private pendingAutoHitTileIds: Set<string> = new Set();
+  // Timers for auto-stopping notes after their MIDI duration
+  private noteStopTimers: number[] = [];
 
   // MIDI song data
   private parsedSong: ParsedSong | null = null;
@@ -107,7 +117,12 @@ export class PinchPianoEngine {
     this.missAnimations = [];
     this.hitAnimations = [];
     this.prevPinchState = null;
-    this.heldNotes.clear();
+    this.lastHitColumns = null;
+    this.lastHitColumnsReleaseTime = 0;
+    this.nextAutoHitTime = 0;
+    this.pendingAutoHitTileIds.clear();
+    for (const id of this.noteStopTimers) clearTimeout(id);
+    this.noteStopTimers = [];
     this.cachedLowestTiles = [];
     this.tilesDirty = true;
     tileIdCounter = 0;
@@ -137,7 +152,12 @@ export class PinchPianoEngine {
     this.hitAnimations = [];
     this.lastUpdateTime = 0;
     this.prevPinchState = null;
-    this.heldNotes.clear();
+    this.lastHitColumns = null;
+    this.lastHitColumnsReleaseTime = 0;
+    this.nextAutoHitTime = 0;
+    this.pendingAutoHitTileIds.clear();
+    for (const id of this.noteStopTimers) clearTimeout(id);
+    this.noteStopTimers = [];
     this.cachedLowestTiles = [];
     this.tilesDirty = true;
     tileIdCounter = 0;
@@ -242,10 +262,10 @@ export class PinchPianoEngine {
       y: 0, // Start at top
       note: scheduled.noteName,
       midiNote: scheduled.midiNote,
-      height: scheduled.height, // Use pre-computed height
+      height: scheduled.height,
+      duration: scheduled.duration,
       hit: false,
       missed: false,
-      isHeld: false,
     };
 
     this.state.tiles.push(tile);
@@ -303,7 +323,51 @@ export class PinchPianoEngine {
     return this.cachedLowestTiles;
   }
 
+  private executeHit(tiles: FallingTile[], requiredColumns: Set<Column>, timestamp: number): void {
+    for (const tile of tiles) {
+      tile.hit = true;
+      tile.hitAt = timestamp;
+
+      this.state.score += 10;
+      this.state.notesHit++;
+
+      // Play note for its MIDI duration, then auto-stop (independent of column activation)
+      const midiNote = tile.midiNote;
+      this.onPlayNote(midiNote, 0.8);
+      const stopTimer = window.setTimeout(() => {
+        this.onStopNote(midiNote);
+      }, tile.duration * 1000);
+      this.noteStopTimers.push(stopTimer);
+
+      this.hitAnimations.push({
+        tileId: tile.id,
+        column: tile.column,
+        y: tile.y,
+        startTime: timestamp,
+        color: this.config.columnColors[tile.column],
+      });
+    }
+
+    if (this.state.score > this.state.highScore) {
+      this.state.highScore = this.state.score;
+      this.persistentHighScore = this.state.score;
+    }
+
+    this.lastHitColumns = new Set(requiredColumns);
+    this.lastHitColumnsReleaseTime = 0;
+    this.invalidateLowestTilesCache();
+  }
+
   private checkHits(pinchState: PinchState, timestamp: number): void {
+    // Expire grace period: if lastHitColumns was released and grace period passed, clear it
+    if (this.lastHitColumns !== null && this.lastHitColumnsReleaseTime > 0) {
+      if (performance.now() - this.lastHitColumnsReleaseTime > this.lastHitColumnsGrace) {
+        this.lastHitColumns = null;
+        this.lastHitColumnsReleaseTime = 0;
+        this.pendingAutoHitTileIds.clear();
+      }
+    }
+
     // Get cached lowest tiles (chord group)
     const lowestTiles = this.getLowestTilesOptimized();
     if (lowestTiles.length === 0) return;
@@ -327,56 +391,55 @@ export class PinchPianoEngine {
       }
     }
 
-    // If all required columns are active, hit all tiles in the chord
-    if (allRequiredActive) {
-      // Check if this is a new hit (wasn't already all active in previous frame)
-      const prevActiveColumns = new Set<Column>();
-      if (this.prevPinchState) {
-        if (this.prevPinchState.col0) prevActiveColumns.add(0);
-        if (this.prevPinchState.col1) prevActiveColumns.add(1);
-        if (this.prevPinchState.col2) prevActiveColumns.add(2);
-        if (this.prevPinchState.col3) prevActiveColumns.add(3);
+    if (!allRequiredActive) return;
+
+    // Columns are active — if they were released during grace period, cancel the release
+    if (this.lastHitColumnsReleaseTime > 0) {
+      this.lastHitColumnsReleaseTime = 0;
+    }
+
+    // Check if this is a new activation (rising edge)
+    const prevActiveColumns = new Set<Column>();
+    if (this.prevPinchState) {
+      if (this.prevPinchState.col0) prevActiveColumns.add(0);
+      if (this.prevPinchState.col1) prevActiveColumns.add(1);
+      if (this.prevPinchState.col2) prevActiveColumns.add(2);
+      if (this.prevPinchState.col3) prevActiveColumns.add(3);
+    }
+
+    let wasAllActive = true;
+    for (const col of requiredColumns) {
+      if (!prevActiveColumns.has(col)) {
+        wasAllActive = false;
+        break;
       }
+    }
 
-      let wasAllActive = true;
-      for (const col of requiredColumns) {
-        if (!prevActiveColumns.has(col)) {
-          wasAllActive = false;
-          break;
+    // Rising edge: column just activated — immediate hit
+    if (!wasAllActive) {
+      this.pendingAutoHitTileIds.clear();
+      this.executeHit(lowestTiles, requiredColumns, timestamp);
+      this.nextAutoHitTime = performance.now() + this.autoHitDelay;
+      return;
+    }
+
+    // Consecutive same-column auto-hit: columns already held from previous hit
+    if (this.lastHitColumns !== null) {
+      const sameColumns = requiredColumns.size === this.lastHitColumns.size &&
+        [...requiredColumns].every(c => this.lastHitColumns!.has(c));
+      if (sameColumns) {
+        const now = performance.now();
+        if (now >= this.nextAutoHitTime) {
+          // Delay elapsed — hit the tiles now
+          this.pendingAutoHitTileIds.clear();
+          this.executeHit(lowestTiles, requiredColumns, timestamp);
+          this.nextAutoHitTime = now + this.autoHitDelay;
+        } else {
+          // Still waiting — mark tiles as pending so they don't count as missed
+          for (const tile of lowestTiles) {
+            this.pendingAutoHitTileIds.add(tile.id);
+          }
         }
-      }
-
-      // Only trigger on rising edge (transition from not-all-active to all-active)
-      if (!wasAllActive) {
-        // Hit all tiles in the chord
-        for (const tile of lowestTiles) {
-          tile.hit = true;
-          tile.hitAt = timestamp;
-          tile.isHeld = true;
-
-          this.state.score += 10;
-          this.state.notesHit++;
-
-          // Play the note
-          this.onPlayNote(tile.midiNote, 0.8);
-          this.heldNotes.set(tile.column, tile.midiNote);
-
-          this.hitAnimations.push({
-            tileId: tile.id,
-            column: tile.column,
-            y: tile.y,
-            startTime: timestamp,
-            color: this.config.columnColors[tile.column],
-          });
-        }
-
-        if (this.state.score > this.state.highScore) {
-          this.state.highScore = this.state.score;
-          this.persistentHighScore = this.state.score;
-        }
-
-        // Invalidate cache since tiles were hit
-        this.invalidateLowestTilesCache();
       }
     }
   }
@@ -389,12 +452,10 @@ export class PinchPianoEngine {
       const wasActive = this.prevPinchState?.[colKey] ?? false;
       const isActive = pinchState[colKey];
 
-      // On release (falling edge)
+      // On release (falling edge) — start grace period for auto-hit chain
       if (wasActive && !isActive) {
-        const heldNote = this.heldNotes.get(column);
-        if (heldNote !== undefined) {
-          this.onStopNote(heldNote);
-          this.heldNotes.delete(column);
+        if (this.lastHitColumns !== null && this.lastHitColumns.has(column)) {
+          this.lastHitColumnsReleaseTime = performance.now();
         }
       }
     });
@@ -405,8 +466,8 @@ export class PinchPianoEngine {
     const missTolerance = 0.05; // How far past hit line before considered missed
 
     for (const tile of this.state.tiles) {
-      // A tile is missed if it passes the hit line without being hit
-      if (!tile.hit && !tile.missed && tile.y > hitLineY + missTolerance) {
+      // A tile is missed if it passes the hit line without being hit (skip pending auto-hits)
+      if (!tile.hit && !tile.missed && !this.pendingAutoHitTileIds.has(tile.id) && tile.y > hitLineY + missTolerance) {
         tile.missed = true;
         tile.missedAt = timestamp;
         this.invalidateLowestTilesCache();
@@ -414,7 +475,10 @@ export class PinchPianoEngine {
         this.onMiss();
         this.createMissAnimation(tile, timestamp);
 
-        // Game over on any miss
+        // Game over on any miss — clear pending sounds
+        for (const id of this.noteStopTimers) clearTimeout(id);
+        this.noteStopTimers = [];
+        this.pendingAutoHitTileIds.clear();
         this.state.status = 'gameover';
         return;
       }
