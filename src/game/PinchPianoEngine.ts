@@ -1,5 +1,6 @@
-import type { GameState, FallingTile, GameConfig, Column, MissAnimation, HitAnimation } from './types';
+import type { GameState, FallingTile, GameConfig, Column, MissAnimation, HitAnimation, ScheduledTile } from './types';
 import type { PinchState } from '../core/pinchDetector';
+import type { ParsedSong } from './MidiSongEngine';
 
 let tileIdCounter = 0;
 
@@ -7,27 +8,38 @@ function generateTileId(): string {
   return `tile-${++tileIdCounter}`;
 }
 
-export type DifficultyMode = 'easy' | 'medium' | 'hard';
-
 export class PinchPianoEngine {
   private config: GameConfig;
   private state: GameState;
   private missAnimations: MissAnimation[] = [];
   private hitAnimations: HitAnimation[] = [];
-  private onPlaySound: (column: Column) => void;
+  private onPlayNote: (midiNote: number, velocity: number) => void;
+  private onStopNote: (midiNote: number) => void;
   private onMiss: () => void;
   private lastUpdateTime: number = 0;
-  private difficultyMode: DifficultyMode = 'medium';
-  private consecutiveHits: number = 0;
-  private persistentHighScore: number = 0;  // Persists across restarts
+  private prevPinchState: PinchState | null = null;
+  // Tracks currently held notes per column
+  private heldNotes: Map<Column, number> = new Map();
+  private persistentHighScore: number = 0;
+
+  // MIDI song data
+  private parsedSong: ParsedSong | null = null;
+  private scheduledTiles: ScheduledTile[] = [];
+  private playStartTime: number = 0; // When actual gameplay started (after countdown)
+
+  // Cached lowest tiles for fast hit detection
+  private cachedLowestTiles: FallingTile[] = [];
+  private tilesDirty: boolean = true;
 
   constructor(
     config: GameConfig,
-    onPlaySound: (column: Column) => void,
+    onPlayNote: (midiNote: number, velocity: number) => void,
+    onStopNote: (midiNote: number) => void,
     onMiss: () => void
   ) {
     this.config = config;
-    this.onPlaySound = onPlaySound;
+    this.onPlayNote = onPlayNote;
+    this.onStopNote = onStopNote;
     this.onMiss = onMiss;
     this.state = this.createInitialState();
   }
@@ -37,13 +49,15 @@ export class PinchPianoEngine {
       status: 'idle',
       score: 0,
       highScore: this.persistentHighScore,
-      lives: this.config.initialLives,
       tiles: [],
-      speed: this.config.initialSpeed,
-      spawnRate: this.config.initialSpawnRate,
-      lastSpawnTime: 0,
+      speed: this.config.baseSpeed,
       startTime: 0,
       countdownValue: 3,
+      songProgress: 0,
+      notesHit: 0,
+      totalNotes: 0,
+      currentSong: null,
+      gameTime: 0,
     };
   }
 
@@ -59,19 +73,43 @@ export class PinchPianoEngine {
     return this.hitAnimations;
   }
 
+  /**
+   * Load a song and prepare for gameplay
+   */
+  loadSong(parsedSong: ParsedSong): void {
+    this.parsedSong = parsedSong;
+    this.scheduledTiles = parsedSong.scheduledTiles.map(t => ({ ...t, spawned: false }));
+    this.state.currentSong = parsedSong;
+    this.state.totalNotes = parsedSong.notes.length;
+  }
+
   start(): void {
+    if (!this.parsedSong) {
+      console.error('No song loaded. Call loadSong() first.');
+      return;
+    }
+
     // Update high score from previous game before resetting
     if (this.state.score > this.persistentHighScore) {
       this.persistentHighScore = this.state.score;
     }
+
+    // Reset scheduled tiles
+    this.scheduledTiles = this.parsedSong.scheduledTiles.map(t => ({ ...t, spawned: false }));
+
     this.state = this.createInitialState();
+    this.state.currentSong = this.parsedSong;
+    this.state.totalNotes = this.parsedSong.notes.length;
     this.state.status = 'countdown';
     this.state.startTime = performance.now();
     this.state.countdownValue = 3;
     this.lastUpdateTime = 0;
     this.missAnimations = [];
     this.hitAnimations = [];
-    this.consecutiveHits = 0;
+    this.prevPinchState = null;
+    this.heldNotes.clear();
+    this.cachedLowestTiles = [];
+    this.tilesDirty = true;
     tileIdCounter = 0;
   }
 
@@ -90,10 +128,18 @@ export class PinchPianoEngine {
 
   reset(): void {
     this.state = this.createInitialState();
+    if (this.parsedSong) {
+      this.state.currentSong = this.parsedSong;
+      this.state.totalNotes = this.parsedSong.notes.length;
+      this.scheduledTiles = this.parsedSong.scheduledTiles.map(t => ({ ...t, spawned: false }));
+    }
     this.missAnimations = [];
     this.hitAnimations = [];
     this.lastUpdateTime = 0;
-    this.consecutiveHits = 0;
+    this.prevPinchState = null;
+    this.heldNotes.clear();
+    this.cachedLowestTiles = [];
+    this.tilesDirty = true;
     tileIdCounter = 0;
   }
 
@@ -117,7 +163,7 @@ export class PinchPianoEngine {
         this.state.countdownValue = 0;
       } else {
         this.state.status = 'playing';
-        this.state.lastSpawnTime = timestamp;
+        this.playStartTime = timestamp;
       }
       return;
     }
@@ -126,157 +172,264 @@ export class PinchPianoEngine {
       return;
     }
 
-    // Spawn new tiles
-    const timeSinceLastSpawn = (timestamp - this.state.lastSpawnTime) / 1000;
-    if (timeSinceLastSpawn >= this.state.spawnRate) {
-      this.spawnTile();
-      this.state.lastSpawnTime = timestamp;
-    }
+    // Calculate game time (time since playing started)
+    this.state.gameTime = (timestamp - this.playStartTime) / 1000;
+
+    // Spawn tiles based on MIDI schedule
+    this.spawnScheduledTiles();
 
     // Move tiles down with current speed
-    const currentSpeed = this.state.speed;
+    const fallSpeed = this.config.hitLineY / this.config.fallDuration;
     for (const tile of this.state.tiles) {
       if (!tile.hit && !tile.missed) {
-        tile.y += currentSpeed * deltaTime;
+        tile.y += fallSpeed * deltaTime;
       }
     }
 
-    // Check for hits while finger is down
+    // Check for hits (lowest tile only)
     this.checkHits(pinchState, timestamp);
 
-    // Check for misses
+    // Handle hold releases
+    this.checkHoldReleases(pinchState);
+
+    this.prevPinchState = { ...pinchState };
+
+    // Check for misses (tile passed hit line)
     this.checkMisses(timestamp);
 
     // Update animations
     this.updateMissAnimations(timestamp, deltaTime);
     this.updateHitAnimations(timestamp);
 
-    // Clean up old tiles
+    // Clean up old tiles (hit tiles and tiles far below screen)
+    const prevLength = this.state.tiles.length;
     this.state.tiles = this.state.tiles.filter(
-      (tile) => tile.y < 1.2 && !tile.hit
+      (tile) => tile.y < 1.3 && !tile.hit
     );
+    if (this.state.tiles.length !== prevLength) {
+      this.invalidateLowestTilesCache();
+    }
 
-    // Check game over
-    if (this.state.lives <= 0) {
-      this.state.status = 'gameover';
+    // Update song progress based on notes hit
+    this.state.songProgress = this.state.totalNotes > 0
+      ? this.state.notesHit / this.state.totalNotes
+      : 0;
+
+    // Check for song completion
+    if (this.isSongComplete()) {
+      this.state.status = 'completed';
     }
   }
 
-  // Minimum Y gap between tiles to ensure they don't overlap in hit zone
-  private readonly MIN_TILE_GAP = 0.18;  // Roughly one tile height apart
+  private spawnScheduledTiles(): void {
+    const gameTime = this.state.gameTime;
 
-  private isColumnAvailable(column: Column, targetY: number): boolean {
-    // Check if any tile in this column would be too close to the target Y position
-    const blockingTile = this.state.tiles.find(
-      (t) => t.column === column && !t.hit && !t.missed && Math.abs(t.y - targetY) < this.MIN_TILE_GAP
-    );
-    return !blockingTile;
+    for (const scheduled of this.scheduledTiles) {
+      if (scheduled.spawned) continue;
+
+      // Spawn tile when game time reaches spawn time
+      if (gameTime >= scheduled.spawnTime) {
+        this.spawnTileFromSchedule(scheduled);
+        scheduled.spawned = true;
+      }
+    }
   }
 
-  private getAvailableColumnsAtY(targetY: number): Column[] {
-    const columns: Column[] = [0, 1, 2, 3];
-    return columns.filter((col) => this.isColumnAvailable(col, targetY));
+  private spawnTileFromSchedule(scheduled: ScheduledTile): void {
+    const tile: FallingTile = {
+      id: generateTileId(),
+      column: scheduled.column,
+      y: 0, // Start at top
+      note: scheduled.noteName,
+      midiNote: scheduled.midiNote,
+      height: scheduled.height, // Use pre-computed height
+      hit: false,
+      missed: false,
+      isHeld: false,
+    };
+
+    this.state.tiles.push(tile);
+    this.invalidateLowestTilesCache();
   }
 
-  private spawnTile(): void {
-    // Determine how many tiles to spawn (increases with difficulty)
-    // At higher speeds, chance to spawn multiple tiles increases
-    const speedRatio = this.state.speed / this.config.initialSpeed;
-    const multiTileChance = Math.min(0.6, (speedRatio - 1) * 0.15);  // Up to 60% chance at high speeds
-    
-    // Base: always spawn at least 1, maybe 2 at higher difficulty
-    let tilesToSpawn = 1;
-    if (Math.random() < multiTileChance) {
-      tilesToSpawn = 2;
+  /**
+   * Mark tiles as dirty - call when tiles are added, removed, or hit
+   */
+  private invalidateLowestTilesCache(): void {
+    this.tilesDirty = true;
+  }
+
+  /**
+   * Find all tiles at the lowest Y position (for chords)
+   * Uses caching for performance - only recalculates when tiles change
+   */
+  private getLowestTilesOptimized(): FallingTile[] {
+    if (!this.tilesDirty && this.cachedLowestTiles.length > 0) {
+      // Verify cache is still valid (tiles not hit/missed)
+      const stillValid = this.cachedLowestTiles.every(t => !t.hit && !t.missed);
+      if (stillValid) {
+        return this.cachedLowestTiles;
+      }
     }
-    
-    // Spawn tiles at staggered Y positions to ensure gap
-    for (let i = 0; i < tilesToSpawn; i++) {
-      // Each additional tile spawns slightly higher (earlier) to maintain gap
-      const targetY = -0.12 - (i * this.MIN_TILE_GAP * 1.2);  // Stagger Y positions
-      
-      const availableColumns = this.getAvailableColumnsAtY(targetY);
-      if (availableColumns.length === 0) continue;
 
-      const column = availableColumns[Math.floor(Math.random() * availableColumns.length)];
-      const note = this.config.columnNotes[column];
+    // Recalculate lowest tiles
+    let lowestY = -Infinity;
+    let lowest: FallingTile | null = null;
 
-      const tile: FallingTile = {
-        id: generateTileId(),
-        column,
-        y: targetY,
-        note,
-        hit: false,
-        missed: false,
-      };
-
-      this.state.tiles.push(tile);
+    // Single pass to find lowest Y
+    for (const tile of this.state.tiles) {
+      if (!tile.hit && !tile.missed && tile.y > lowestY) {
+        lowestY = tile.y;
+        lowest = tile;
+      }
     }
+
+    if (!lowest) {
+      this.cachedLowestTiles = [];
+      this.tilesDirty = false;
+      return [];
+    }
+
+    // Collect all tiles at same Y level (chord tolerance)
+    const tolerance = 0.005;
+    this.cachedLowestTiles = [];
+    for (const tile of this.state.tiles) {
+      if (!tile.hit && !tile.missed && Math.abs(tile.y - lowestY) < tolerance) {
+        this.cachedLowestTiles.push(tile);
+      }
+    }
+
+    this.tilesDirty = false;
+    return this.cachedLowestTiles;
   }
 
   private checkHits(pinchState: PinchState, timestamp: number): void {
-    const { yMin, yMax } = this.config.hitZone;
-    const cols: (keyof PinchState)[] = ['col0', 'col1', 'col2', 'col3'];
+    // Get cached lowest tiles (chord group)
+    const lowestTiles = this.getLowestTilesOptimized();
+    if (lowestTiles.length === 0) return;
 
-    cols.forEach((colKey, colIndex) => {
-      const column = colIndex as Column;
-      const isActive = pinchState[colKey];
+    // Get the set of columns required for the current chord
+    const requiredColumns = new Set(lowestTiles.map(t => t.column));
 
-      // If column is not activated, skip
-      if (!isActive) return;
+    // Check which columns are currently active
+    const activeColumns = new Set<Column>();
+    if (pinchState.col0) activeColumns.add(0);
+    if (pinchState.col1) activeColumns.add(1);
+    if (pinchState.col2) activeColumns.add(2);
+    if (pinchState.col3) activeColumns.add(3);
 
-      // Find ALL tiles in the hit zone for this activated column
-      const hitableTiles = this.state.tiles.filter(
-        (t) =>
-          t.column === column &&
-          !t.hit &&
-          !t.missed &&
-          t.y >= yMin &&
-          t.y <= yMax
-      );
+    // Check if ALL required columns are active
+    let allRequiredActive = true;
+    for (const col of requiredColumns) {
+      if (!activeColumns.has(col)) {
+        allRequiredActive = false;
+        break;
+      }
+    }
 
-      // Hit ALL tiles in the zone while finger is down
-      for (const tile of hitableTiles) {
-        tile.hit = true;
-        tile.hitAt = timestamp;
+    // If all required columns are active, hit all tiles in the chord
+    if (allRequiredActive) {
+      // Check if this is a new hit (wasn't already all active in previous frame)
+      const prevActiveColumns = new Set<Column>();
+      if (this.prevPinchState) {
+        if (this.prevPinchState.col0) prevActiveColumns.add(0);
+        if (this.prevPinchState.col1) prevActiveColumns.add(1);
+        if (this.prevPinchState.col2) prevActiveColumns.add(2);
+        if (this.prevPinchState.col3) prevActiveColumns.add(3);
+      }
 
-        // Simple scoring: 10 points per hit
-        this.state.score += 10;
-        // Update high score in real-time
+      let wasAllActive = true;
+      for (const col of requiredColumns) {
+        if (!prevActiveColumns.has(col)) {
+          wasAllActive = false;
+          break;
+        }
+      }
+
+      // Only trigger on rising edge (transition from not-all-active to all-active)
+      if (!wasAllActive) {
+        // Hit all tiles in the chord
+        for (const tile of lowestTiles) {
+          tile.hit = true;
+          tile.hitAt = timestamp;
+          tile.isHeld = true;
+
+          this.state.score += 10;
+          this.state.notesHit++;
+
+          // Play the note
+          this.onPlayNote(tile.midiNote, 0.8);
+          this.heldNotes.set(tile.column, tile.midiNote);
+
+          this.hitAnimations.push({
+            tileId: tile.id,
+            column: tile.column,
+            y: tile.y,
+            startTime: timestamp,
+            color: this.config.columnColors[tile.column],
+          });
+        }
+
         if (this.state.score > this.state.highScore) {
           this.state.highScore = this.state.score;
           this.persistentHighScore = this.state.score;
         }
-        this.registerSuccessfulHit();
 
-        this.onPlaySound(column);
+        // Invalidate cache since tiles were hit
+        this.invalidateLowestTilesCache();
+      }
+    }
+  }
 
-        this.hitAnimations.push({
-          tileId: tile.id,
-          column,
-          y: tile.y,
-          startTime: timestamp,
-          color: this.config.columnColors[column],
-        });
+  private checkHoldReleases(pinchState: PinchState): void {
+    const cols: (keyof PinchState)[] = ['col0', 'col1', 'col2', 'col3'];
+
+    cols.forEach((colKey, colIndex) => {
+      const column = colIndex as Column;
+      const wasActive = this.prevPinchState?.[colKey] ?? false;
+      const isActive = pinchState[colKey];
+
+      // On release (falling edge)
+      if (wasActive && !isActive) {
+        const heldNote = this.heldNotes.get(column);
+        if (heldNote !== undefined) {
+          this.onStopNote(heldNote);
+          this.heldNotes.delete(column);
+        }
       }
     });
   }
 
   private checkMisses(timestamp: number): void {
-    const { yMax } = this.config.hitZone;
+    const hitLineY = this.config.hitLineY;
+    const missTolerance = 0.05; // How far past hit line before considered missed
 
     for (const tile of this.state.tiles) {
-      if (!tile.hit && !tile.missed && tile.y > yMax + 0.02) {
+      // A tile is missed if it passes the hit line without being hit
+      if (!tile.hit && !tile.missed && tile.y > hitLineY + missTolerance) {
         tile.missed = true;
         tile.missedAt = timestamp;
+        this.invalidateLowestTilesCache();
 
-        this.state.lives--;
-        this.consecutiveHits = 0;
         this.onMiss();
-
         this.createMissAnimation(tile, timestamp);
+
+        // Game over on any miss
+        this.state.status = 'gameover';
+        return;
       }
     }
+  }
+
+  private isSongComplete(): boolean {
+    if (!this.parsedSong) return false;
+
+    // Song is complete when all tiles have been spawned and processed
+    const allSpawned = this.scheduledTiles.every(t => t.spawned);
+    const allTilesGone = this.state.tiles.length === 0 ||
+      this.state.tiles.every(t => t.hit || t.missed);
+
+    return allSpawned && allTilesGone;
   }
 
   private createMissAnimation(tile: FallingTile, timestamp: number): void {
@@ -339,28 +492,18 @@ export class PinchPianoEngine {
     });
   }
 
-  setDifficultyMode(mode: DifficultyMode): void {
-    this.difficultyMode = mode;
-    // Reset streak so the next step uses the new mode cleanly
-    this.consecutiveHits = 0;
+  /**
+   * Get the lowest tile for UI highlighting
+   */
+  getLowestTile(): FallingTile | null {
+    const tiles = this.getLowestTilesOptimized();
+    return tiles.length > 0 ? tiles[0] : null;
   }
 
-  private registerSuccessfulHit(): void {
-    this.consecutiveHits += 1;
-    if (this.consecutiveHits >= this.config.hitsPerSpeedStep) {
-      const increment = this.config.speedSteps[this.difficultyMode];
-      // Apply speed increase but cap at maxSpeed (very high, practically unreachable)
-      this.state.speed = Math.min(
-        this.state.speed + increment,
-        this.config.maxSpeed
-      );
-      // Also increase spawn rate (decrease time between spawns)
-      const spawnDecrement = increment * 0.5; // Spawn rate increases proportionally
-      this.state.spawnRate = Math.max(
-        this.state.spawnRate - spawnDecrement,
-        this.config.minSpawnRate
-      );
-      this.consecutiveHits = 0;
-    }
+  /**
+   * Get all lowest tiles (chord group) for UI highlighting
+   */
+  getLowestTiles(): FallingTile[] {
+    return this.getLowestTilesOptimized();
   }
 }

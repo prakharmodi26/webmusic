@@ -12,8 +12,10 @@
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.32",
     "@playwright/test": "^1.58.1",
+    "@tonejs/midi": "^2.0.28",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "tone": "^15.1.22"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

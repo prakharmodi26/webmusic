@@ -1,29 +1,34 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useCamera } from '../hooks/useCamera';
 import { useHandTracking } from '../hooks/useHandTracking';
-import { PinchPianoEngine, type DifficultyMode } from '../game/PinchPianoEngine';
+import { PinchPianoEngine } from '../game/PinchPianoEngine';
+import { MidiSongEngine } from '../game/MidiSongEngine';
 import { pinchPianoConfig } from '../config/instruments/pinchPiano';
 import { detectPinches, createEmptyPinchState, type PinchState } from '../core/pinchDetector';
-import { AudioEngine } from '../core/audioEngine';
-import type { Column, GameState, MissAnimation, HitAnimation } from '../game/types';
+import { ToneAudioEngine } from '../audio/ToneAudioEngine';
+import SongSelector from './SongSelector';
+import type { Column, GameState, MissAnimation, HitAnimation, Song, FallingTile } from '../game/types';
 
 interface PinchPianoGameProps {
   onGoHome: () => void;
 }
 
+type GameStage = 'loading' | 'songSelect' | 'ready' | 'playing';
+
 export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
-  const [stage, setStage] = useState<'loading' | 'ready' | 'playing'>('loading');
+  const [stage, setStage] = useState<GameStage>('loading');
   const [gameState, setGameState] = useState<GameState | null>(null);
-  const [difficultyMode, setDifficultyMode] = useState<DifficultyMode>('medium');
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [selectedSong, setSelectedSong] = useState<Song | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<PinchPianoEngine | null>(null);
-  const audioRef = useRef<AudioEngine | null>(null);
+  const audioRef = useRef<ToneAudioEngine | null>(null);
+  const midiEngineRef = useRef<MidiSongEngine | null>(null);
   const pinchStateRef = useRef<PinchState>(createEmptyPinchState());
   const rafRef = useRef<number>(0);
   const missAnimationsRef = useRef<MissAnimation[]>([]);
   const hitAnimationsRef = useRef<HitAnimation[]>([]);
+  const lowestTileRef = useRef<FallingTile | null>(null);
 
   const { videoRef, isActive: cameraActive, error: cameraError, start: startCamera } = useCamera();
   const { frame, isLoading: trackingLoading, isReady: trackingReady, init: initTracking, startLoop } = useHandTracking(videoRef);
@@ -34,14 +39,18 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
       await startCamera();
       await initTracking();
 
-      const audio = new AudioEngine();
+      // Initialize Tone.js audio engine
+      const audio = new ToneAudioEngine();
       await audio.init();
-
-      const columns: Column[] = [0, 1, 2, 3];
-      await Promise.all(
-        columns.map((col) => audio.loadSample(`col-${col}`, pinchPianoConfig.sounds[col]))
-      );
       audioRef.current = audio;
+
+      // Initialize MIDI engine
+      midiEngineRef.current = new MidiSongEngine(
+        pinchPianoConfig.fallDuration,
+        pinchPianoConfig.hitLineY,
+        pinchPianoConfig.baseTileHeight,
+        pinchPianoConfig.maxTileHeight
+      );
     };
 
     init();
@@ -55,36 +64,65 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
   useEffect(() => {
     if (cameraActive && trackingReady) {
       startLoop();
-      setStage('ready');
+      setStage('songSelect');
     }
   }, [cameraActive, trackingReady, startLoop]);
 
-  const playSound = useCallback((column: Column) => {
-    audioRef.current?.play(`col-${column}`, 0.8);
+  // Resume audio on user interaction
+  const handleUserInteraction = useCallback(async () => {
+    await audioRef.current?.resume();
   }, []);
 
-  const onMiss = useCallback(() => {}, []);
+  const playNote = useCallback((midiNote: number, velocity: number) => {
+    audioRef.current?.playNote(midiNote, velocity);
+  }, []);
 
-  const handleStartGame = useCallback(() => {
-    const engine = new PinchPianoEngine(pinchPianoConfig, playSound, onMiss);
-    engine.setDifficultyMode(difficultyMode);
+  const stopNote = useCallback((midiNote: number) => {
+    audioRef.current?.stopNote(midiNote);
+  }, []);
+
+  const onMiss = useCallback(() => {
+    audioRef.current?.stopAll();
+  }, []);
+
+  const handleSongSelect = useCallback((song: Song) => {
+    setSelectedSong(song);
+    setStage('ready');
+  }, []);
+
+  const handleStartGame = useCallback(async () => {
+    if (!selectedSong || !midiEngineRef.current) return;
+
+    await handleUserInteraction();
+
+    const parsedSong = midiEngineRef.current.prepareSong(selectedSong);
+
+    const engine = new PinchPianoEngine(pinchPianoConfig, playNote, stopNote, onMiss);
+    engine.loadSong(parsedSong);
     engine.start();
     engineRef.current = engine;
     setGameState(engine.getState());
     setStage('playing');
-  }, [difficultyMode, playSound, onMiss]);
+  }, [selectedSong, playNote, stopNote, onMiss, handleUserInteraction]);
 
-  const handleRestart = useCallback(() => {
+  const handleRestart = useCallback(async () => {
+    await handleUserInteraction();
+
     if (engineRef.current) {
       engineRef.current.start();
-      engineRef.current.setDifficultyMode(difficultyMode);
       setGameState(engineRef.current.getState());
     } else {
       handleStartGame();
     }
-  }, [difficultyMode, handleStartGame]);
+  }, [handleStartGame, handleUserInteraction]);
 
-  // Update pinch state from hand tracking (now handles multiple hands)
+  const handleBackToSongSelect = useCallback(() => {
+    audioRef.current?.stopAll();
+    setSelectedSong(null);
+    setStage('songSelect');
+  }, []);
+
+  // Update pinch state from hand tracking
   useEffect(() => {
     if (frame && frame.hands.length > 0) {
       pinchStateRef.current = detectPinches(frame.hands, pinchStateRef.current);
@@ -105,6 +143,7 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
       setGameState({ ...engine.getState() });
       missAnimationsRef.current = engine.getMissAnimations();
       hitAnimationsRef.current = engine.getHitAnimations();
+      lowestTileRef.current = engine.getLowestTile();
 
       rafRef.current = requestAnimationFrame(loop);
     };
@@ -112,69 +151,6 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
   }, [stage]);
-
-  // Apply difficulty mode changes to running engine
-  useEffect(() => {
-    if (engineRef.current) {
-      engineRef.current.setDifficultyMode(difficultyMode);
-    }
-  }, [difficultyMode]);
-
-  const renderSettingsMenu = () => (
-    <div className="absolute top-4 right-4 z-30">
-      <button
-        onClick={() => setSettingsOpen((o) => !o)}
-        className="w-10 h-10 rounded-full bg-gray-900/70 backdrop-blur-sm flex items-center justify-center text-gray-300 hover:text-white hover:bg-gray-800 transition-colors"
-        title="Settings"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19.14,12.94a1.72,1.72,0,0,0,0-1.88l2-1.55a.43.43,0,0,0,.1-.54l-1.9-3.29a.44.44,0,0,0-.52-.19l-2.35.94a6.55,6.55,0,0,0-1.62-.94l-.36-2.49A.44.44,0,0,0,13,2H11a.44.44,0,0,0-.43.36L10.21,4.85a6.91,6.91,0,0,0-1.62.94L6.24,4.85a.44.44,0,0,0-.52.19L3.82,8.33a.44.44,0,0,0,.1.54l2,1.55a1.72,1.72,0,0,0,0,1.88l-2,1.55a.43.43,0,0,0-.1.54l1.9,3.29a.44.44,0,0,0,.52.19l2.35-.94a6.55,6.55,0,0,0,1.62.94l.36,2.49A.44.44,0,0,0,11,22h2a.44.44,0,0,0,.43-.36l.36-2.49a6.91,6.91,0,0,0,1.62-.94l2.35.94a.44.44,0,0,0,.52-.19l1.9-3.29a.44.44,0,0,0-.1-.54ZM12,15.5A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z" />
-        </svg>
-      </button>
-
-      {settingsOpen && (
-        <div className="mt-2 w-56 bg-gray-900/95 backdrop-blur-md border border-gray-800 rounded-lg shadow-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-200">Difficulty</span>
-            <button
-              className="text-xs text-gray-400 hover:text-white"
-              onClick={() => setSettingsOpen(false)}
-            >
-              Close
-            </button>
-          </div>
-          <div className="space-y-2">
-            {(['easy', 'medium', 'hard'] as DifficultyMode[]).map((mode) => (
-              <label
-                key={mode}
-                className={`flex items-center gap-3 cursor-pointer rounded px-2 py-2 ${
-                  difficultyMode === mode ? 'bg-gray-800 border border-pink-500/50' : 'bg-gray-800/40'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="difficulty"
-                  value={mode}
-                  checked={difficultyMode === mode}
-                  onChange={() => setDifficultyMode(mode)}
-                  className="accent-pink-500"
-                />
-                <div className="flex flex-col">
-                  <span className="text-sm font-semibold capitalize text-white">{mode}</span>
-                  <span className="text-xs text-gray-400">
-                    +{pinchPianoConfig.speedSteps[mode]} speed every {pinchPianoConfig.hitsPerSpeedStep} hits
-                  </span>
-                </div>
-              </label>
-            ))}
-          </div>
-          <p className="text-xs text-gray-500">
-            Speed increases only after {pinchPianoConfig.hitsPerSpeedStep} consecutive hits. Misses reset the streak but keep current speed.
-          </p>
-        </div>
-      )}
-    </div>
-  );
 
   // Canvas rendering
   useEffect(() => {
@@ -193,7 +169,7 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
 
       const w = canvas.width;
       const h = canvas.height;
-      const { hitZone, columnColors } = pinchPianoConfig;
+      const { hitLineY, columnColors } = pinchPianoConfig;
 
       ctx.clearRect(0, 0, w, h);
 
@@ -212,36 +188,30 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
         ctx.stroke();
       }
 
-      // Draw hit zone
-      const hitZoneY = hitZone.yMin * h;
-      const hitZoneHeight = (hitZone.yMax - hitZone.yMin) * h;
-
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-      ctx.fillRect(0, hitZoneY, w, hitZoneHeight);
-
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.lineWidth = 2;
+      // Draw hit line (single line instead of zone)
+      const hitY = hitLineY * h;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(0, hitZoneY);
-      ctx.lineTo(w, hitZoneY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, hitZoneY + hitZoneHeight);
-      ctx.lineTo(w, hitZoneY + hitZoneHeight);
+      ctx.moveTo(0, hitY);
+      ctx.lineTo(w, hitY);
       ctx.stroke();
 
       // Draw falling tiles
       if (gameState) {
+        const lowestTile = lowestTileRef.current;
+
         for (const tile of gameState.tiles) {
           if (tile.hit || tile.missed) continue;
 
           const colWidth = w / 4;
           const tileWidth = colWidth * 0.8;
-          const tileHeight = h * 0.08;
+          const tileHeight = tile.height * h;
           const x = (tile.column / 4) * w + (colWidth - tileWidth) / 2;
-          const y = tile.y * h - tileHeight / 2;
+          const y = tile.y * h - tileHeight;
 
           const color = columnColors[tile.column];
+          const isLowest = lowestTile?.id === tile.id;
 
           // Shadow
           ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
@@ -258,9 +228,24 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
           ctx.roundRect(x, y, tileWidth, tileHeight, 8);
           ctx.fill();
 
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-          ctx.lineWidth = 2;
+          // Highlight lowest tile
+          if (isLowest) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.lineWidth = 3;
+          } else {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 2;
+          }
           ctx.stroke();
+
+          // Note name on tile (for longer tiles)
+          if (tileHeight > 40) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(tile.note, x + tileWidth / 2, y + tileHeight / 2);
+          }
         }
 
         // Hit animations
@@ -357,19 +342,52 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
     );
   }
 
-  // Ready/Start screen
-  if (stage === 'ready') {
+  // Song selection screen
+  if (stage === 'songSelect') {
     return (
       <div className="relative w-full h-full bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
         <video ref={videoRef} className="hidden" playsInline muted />
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
-        {renderSettingsMenu()}
+
+        <SongSelector
+          bundledSongPaths={pinchPianoConfig.bundledSongs}
+          onSongSelect={handleSongSelect}
+          onBack={onGoHome}
+        />
+
+        <button
+          onClick={onGoHome}
+          className="absolute top-4 left-4 z-30 bg-gray-900/70 backdrop-blur-sm w-10 h-10 rounded-full flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+          title="Back to Home"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
+
+  // Ready/Start screen (after song selected)
+  if (stage === 'ready' && selectedSong) {
+    return (
+      <div className="relative w-full h-full bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
+        <video ref={videoRef} className="hidden" playsInline muted />
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
           <div className="text-center space-y-8 p-8">
-            <h1 className="text-5xl font-bold text-white">Pinch Piano</h1>
-            <p className="text-xl text-purple-200 max-w-md mx-auto">
-              Pinch your thumb with different fingers to hit tiles!
+            <h1 className="text-5xl font-bold text-white">Piano Tiles</h1>
+            <div className="bg-gray-900/80 rounded-xl px-8 py-6">
+              <h2 className="text-2xl font-semibold text-purple-300 mb-2">{selectedSong.name}</h2>
+              <div className="flex justify-center gap-6 text-gray-400">
+                <span>{Math.round(selectedSong.bpm)} BPM</span>
+                <span>{selectedSong.notes.length} notes</span>
+              </div>
+            </div>
+
+            <p className="text-lg text-purple-200 max-w-md mx-auto">
+              Hit the lowest tile in each column. Miss any tile = Game Over!
             </p>
 
             {/* Finger mapping guide */}
@@ -384,7 +402,6 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
                     >
                       <span className="text-sm font-bold text-white">1</span>
                     </div>
-                    <span className="text-xs text-gray-300">Thumb +</span>
                     <span className="text-xs text-gray-300">Middle</span>
                   </div>
                   <div className="flex flex-col items-center gap-2">
@@ -394,7 +411,6 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
                     >
                       <span className="text-sm font-bold text-white">2</span>
                     </div>
-                    <span className="text-xs text-gray-300">Thumb +</span>
                     <span className="text-xs text-gray-300">Index</span>
                   </div>
                 </div>
@@ -412,7 +428,6 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
                     >
                       <span className="text-sm font-bold text-white">3</span>
                     </div>
-                    <span className="text-xs text-gray-300">Thumb +</span>
                     <span className="text-xs text-gray-300">Index</span>
                   </div>
                   <div className="flex flex-col items-center gap-2">
@@ -422,7 +437,6 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
                     >
                       <span className="text-sm font-bold text-white">4</span>
                     </div>
-                    <span className="text-xs text-gray-300">Thumb +</span>
                     <span className="text-xs text-gray-300">Middle</span>
                   </div>
                 </div>
@@ -439,10 +453,10 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
 
               <div>
                 <button
-                  onClick={onGoHome}
+                  onClick={handleBackToSongSelect}
                   className="text-gray-400 hover:text-white transition-colors"
                 >
-                  Back to Home
+                  Choose Different Song
                 </button>
               </div>
             </div>
@@ -467,7 +481,6 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
     <div className="relative w-full h-full bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
       <video ref={videoRef} className="hidden" playsInline muted />
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
-      {renderSettingsMenu()}
 
       {/* Countdown */}
       {gameState?.status === 'countdown' && (
@@ -501,18 +514,17 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
             )}
           </div>
 
-          <div className="bg-gray-900/70 backdrop-blur-sm px-4 py-2 rounded-full flex gap-1">
-            {Array.from({ length: pinchPianoConfig.initialLives }).map((_, idx) => (
-              <svg
-                key={idx}
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill={idx < gameState.lives ? '#FF6B6B' : '#333'}
-              >
-                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-              </svg>
-            ))}
+          {/* Progress bar */}
+          <div className="flex items-center gap-3">
+            <div className="bg-gray-900/70 backdrop-blur-sm px-3 py-2 rounded-full flex items-center gap-2">
+              <span className="text-sm text-gray-300">{gameState.notesHit}/{gameState.totalNotes}</span>
+            </div>
+            <div className="w-32 h-3 bg-gray-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-200"
+                style={{ width: `${gameState.songProgress * 100}%` }}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -522,17 +534,63 @@ export default function PinchPianoGame({ onGoHome }: PinchPianoGameProps) {
         <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-30">
           <div className="text-center space-y-6 p-8">
             <h2 className="text-5xl font-bold text-red-500">Game Over</h2>
-            <p className="text-3xl text-white">Score: {gameState.score}</p>
+            <div className="space-y-2">
+              <p className="text-3xl text-white">Score: {gameState.score}</p>
+              <p className="text-lg text-gray-400">
+                {gameState.notesHit} / {gameState.totalNotes} notes ({Math.round(gameState.songProgress * 100)}%)
+              </p>
+            </div>
             <div className="space-y-3">
               <button
                 onClick={handleRestart}
                 className="block w-full px-8 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white text-lg font-bold rounded-full hover:scale-105 transition-transform"
               >
-                Play Again
+                Try Again
+              </button>
+              <button
+                onClick={handleBackToSongSelect}
+                className="block w-full px-8 py-3 bg-gray-700 text-white text-lg font-semibold rounded-full hover:bg-gray-600 transition-colors"
+              >
+                Choose Song
               </button>
               <button
                 onClick={onGoHome}
+                className="block w-full px-8 py-3 text-gray-400 hover:text-white transition-colors"
+              >
+                Back to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Song Complete */}
+      {gameState?.status === 'completed' && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-30">
+          <div className="text-center space-y-6 p-8">
+            <h2 className="text-5xl font-bold text-green-400">Song Complete!</h2>
+            <div className="space-y-2">
+              <p className="text-3xl text-white">Score: {gameState.score}</p>
+              <p className="text-lg text-gray-300">
+                Perfect! {gameState.notesHit} / {gameState.totalNotes} notes
+              </p>
+            </div>
+            <div className="space-y-3">
+              <button
+                onClick={handleRestart}
+                className="block w-full px-8 py-3 bg-gradient-to-r from-green-500 to-teal-600 text-white text-lg font-bold rounded-full hover:scale-105 transition-transform"
+              >
+                Play Again
+              </button>
+              <button
+                onClick={handleBackToSongSelect}
                 className="block w-full px-8 py-3 bg-gray-700 text-white text-lg font-semibold rounded-full hover:bg-gray-600 transition-colors"
+              >
+                Choose Song
+              </button>
+              <button
+                onClick={onGoHome}
+                className="block w-full px-8 py-3 text-gray-400 hover:text-white transition-colors"
               >
                 Back to Home
               </button>

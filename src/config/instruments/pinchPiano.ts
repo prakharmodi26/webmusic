@@ -1,17 +1,8 @@
 import type { GameConfig, Column } from '../../game/types';
 
 export const pinchPianoConfig: GameConfig = {
-  id: 'piano-tiles',
+  id: 'pinch-piano',
   name: 'Piano Tiles',
-
-  // Mapping: Thumb + finger → column → note
-  // Index(0)=C4, Middle(1)=E4, Ring(2)=G4, Pinky(3)=C5
-  columnNotes: {
-    0: 'C4',
-    1: 'E4',
-    2: 'G4',
-    3: 'C5',
-  } as Record<Column, string>,
 
   // Column colors (left to right)
   columnColors: {
@@ -21,34 +12,23 @@ export const pinchPianoConfig: GameConfig = {
     3: '#AA96DA',  // Purple
   } as Record<Column, string>,
 
-  // Speed settings (normalized y units per second) - challenging progression
-  initialSpeed: 0.6,
-  maxSpeed: 10.0,  // Very high max speed - practically unreachable, makes game feel endless
-  hitsPerSpeedStep: 3,  // Speed increases every 3 hits for faster progression
-  speedSteps: {
-    easy: 0.03,
-    medium: 0.05,
-    hard: 0.08,
-  },
+  // Speed is derived from fall duration, this is a multiplier
+  baseSpeed: 1.0,
 
-  // Spawn settings (seconds between tile spawns) - faster spawning
-  initialSpawnRate: 1.2,
-  minSpawnRate: 0.4,  // Minimum spawn rate (fastest)
+  // Hit line position (normalized Y where tiles should be hit)
+  hitLineY: 0.85,
 
-  // Hit zone (bottom of screen, normalized y coordinates)
-  hitZone: {
-    yMin: 0.75,
-    yMax: 0.95,
-  },
+  // Tile sizing (normalized heights)
+  baseTileHeight: 0.08,   // Minimum tile height
+  maxTileHeight: 0.25,    // Maximum tile height for long notes
 
-  // Lives
-  initialLives: 5,
+  // Time for a tile to fall from top to hit line
+  fallDuration: 2.0,      // In seconds
 
-  // Sound files
-  sounds: {
-    0: '/sounds/piano/C4.mp3',
-    1: '/sounds/piano/E4.mp3',
-    2: '/sounds/piano/G4.mp3',
-    3: '/sounds/piano/C5.mp3',
-  } as Record<Column, string>,
+  // Bundled songs (paths relative to public folder)
+  bundledSongs: [
+    '/songs/twinkle-twinkle.mid',
+    '/songs/mary-had-a-little-lamb.mid',
+    '/songs/ode-to-joy.mid',
+  ],
 };
